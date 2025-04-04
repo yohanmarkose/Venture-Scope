@@ -6,7 +6,6 @@ Every day, promising businesses fail not because of bad products but because the
 
 Venture Scope aims to democratize business intelligence by creating an AI advisory platform that translates complex market data into actionable insights. By analyzing location dynamics, competitor landscapes, regulatory environments, and industry trends, we'll give entrepreneurs the same strategic advantages previously available only to resource-rich corporations—turning entrepreneurial guesswork into informed strategy.
 
-
 ## Project Overview
 
 To create a comprehensive startup advisory system, the project will integrate data from CrunchBase, Yahoo Finance, real estate databases, e-commerce analytics, and government policy documents. The platform will analyze business domains, company size parameters, and location preferences to generate tailored recommendations and insights. Deliverables include a functional data pipeline for data ingestion, analytical models for AI-driven business analysis, and an interactive dashboard for seamless user experience.
@@ -35,6 +34,16 @@ To create a comprehensive startup advisory system, the project will integrate da
 - Enable more agile business planning with comprehensive, on-demand analytics
 - Democratize access to premium business intelligence
 - Facilitate economic development by identifying growth opportunities
+
+## Team Members
+
+- Vedant Mane
+- Abhinav Gangurde
+- Yohan Markose
+
+## Attestation:
+
+WE ATTEST THAT WE HAVEN’T USED ANY OTHER STUDENTS’ WORK IN OUR ASSIGNMENT AND ABIDE BY THE POLICIES LISTED IN THE STUDENT HANDBOOK
 
 ## Methodologies
 
@@ -146,3 +155,8 @@ Vector DB for State level Government and Business Policy Documents
 Use Mistral OCR to convert PDF documents to markdown format
 Generate embeddings for document chunks using Open AI embedding models
 Store embeddings in Pinecone with relevant metadata for efficient retrieval and filtering
+
+## Conclusion
+
+Venture Scope isn't just another analytics platform—it's a business equalizer. By combining cutting-edge AI technologies with comprehensive market data, we're creating a strategic advantage that was previously available only to corporate giants. Our solution will transform how entrepreneurs evaluate opportunities, select locations, and understand market dynamics, all through an intuitive interface delivering actionable insights in minutes rather than months. With a focused two-week development sprint led by our specialized team, we'll deliver an MVP that demonstrates immediate value while establishing the foundation for ongoing evolution. Venture Scope represents not just a tool but a fundamental shift in how business decisions are made – turning entrepreneurial intuition into data-driven confidence and leveling the playing field for innovators everywhere.
+
