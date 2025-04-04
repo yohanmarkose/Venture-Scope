@@ -200,6 +200,33 @@ Store embeddings in Pinecone with relevant metadata for efficient retrieval and 
 - Project Documentation: April 18, 2025
 - Project Presentation & Demonstration: April 19, 2025
 
+## Resources and Team:
+
+### Team-Workload Segregation :
+
+| Team Member | Contribution |
+|-------------|-------------|
+| Abhinav Gangurde | • Handle data pipeline orchestration using Apache Airflow<br>• Develop and maintain AWS S3 data staging capabilities<br>• Deploy the application using Docker & Docker Compose on the Google Cloud Infrastructure<br>• Prototype and develop MCP integration with Google Maps for the Location Intelligence Tool |
+| Vedant Mane | • Handle OCR processing of regulatory documents<br>• Implement Pinecone vector embeddings for semantic search<br>• Develop the Streamlit frontend dashboard<br>• Create FastAPI backend endpoints<br>• Configure LLM integrations via LiteLLM and OpenAI API |
+| Yohan Markose | • Implement Snowflake integrations and data infrastructure<br>• Implement Agentic Architecture using Langgraph<br>• Implement Tavily for Web Search Integration Tool<br>• Develop and implement graphs and charts for data visualizations |
+
+## Risks and Mitigation Strategies:
+
+### MCP Integration and Deployment
+
+- Risks : Integration with GoogleMaps and Langgraph and overall workflow integration with application
+- Mitigation : Protype the workflow and allocate sufficient time in the development cycle.
+
+### MCP Integration with Langgraph
+
+- Risks : Integration with Langgraph in binding MCP servers and tools with langgraph agent and workflow
+- Mitigation : Protype the workflow, isolate MCP from langgraph agents if needed
+
+### Project Management
+
+- Risks: With a 14 days timeline for the application deliver workload and functionalities may need to be reviewed
+- Mitigation : Establish a daily checkpoint meetings like scrum to quickly address blockers and discuss on the potential solution
+
 ## Conclusion
 
 Venture Scope isn't just another analytics platform—it's a business equalizer. By combining cutting-edge AI technologies with comprehensive market data, we're creating a strategic advantage that was previously available only to corporate giants. Our solution will transform how entrepreneurs evaluate opportunities, select locations, and understand market dynamics, all through an intuitive interface delivering actionable insights in minutes rather than months. With a focused two-week development sprint led by our specialized team, we'll deliver an MVP that demonstrates immediate value while establishing the foundation for ongoing evolution. Venture Scope represents not just a tool but a fundamental shift in how business decisions are made – turning entrepreneurial intuition into data-driven confidence and leveling the playing field for innovators everywhere.
