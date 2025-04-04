@@ -18,6 +18,12 @@ To create a comprehensive startup advisory system, the project will integrate da
 - Venture capital firms and angel investors
 - Economic development organizations
 
+## Resources
+
+Google Codelab: [Codelab](https://codelabs-preview.appspot.com/?file_id=1N4bKPKzBa_0oUqOuSj-WLyxeYnQDBJX74bt5igdLZYM/edit?tab=t.0#4)
+
+Google Docs: [Project Document](https://docs.google.com/document/d/1N4bKPKzBa_0oUqOuSj-WLyxeYnQDBJX74bt5igdLZYM/edit?usp=sharing)
+
 ## Problem Statement:
 
 ### Current Challenges
@@ -155,6 +161,44 @@ Vector DB for State level Government and Business Policy Documents
 Use Mistral OCR to convert PDF documents to markdown format
 Generate embeddings for document chunks using Open AI embedding models
 Store embeddings in Pinecone with relevant metadata for efficient retrieval and filtering
+
+
+## Project Plan and Timeline
+
+### Milestones and Deliverables:
+
+- Project Initialization & Data Collection (Days 1-3)
+  - Project requirements documentation
+  - Data source access configuration (Snowflake, Yahoo Finance)
+  - AWS infrastructure setup with pre-configured templates
+  - Initial data collection from Snowflake and API and identified unstructured data sources
+  - Prototyping and workflow configurability checks with the selected tools sets
+
+- Core System Development (Days 4-7)
+  - Streamlined Snowflake schema implementation - harmonize the structured unstructured datasets
+  - Pinecone vector database configuration and document processing
+  - FastAPI backend development with minimal viable endpoints
+  - Basic streamlit dashboard framework for UI workflow for the application
+
+- Analytics & Integration (Days 8-10)
+  - LLM integration with simplified prompt templates
+  - Limited-scope multi-agent framework implementation and prototyping
+  - Integration of critical data sources and web search modules in the multi-agentic framework
+  - Focused regulatory analysis for top 10 business-friendly states and 5 business domains
+
+- Testing & Deployment (Days 11-14)
+  - Deployment and testing the workflow for any bugs and updatation
+  - Documentation of core functionality
+  - Project documentation, presentation and demonstration
+
+### Estimated Workflow Timeline: 
+- Project Start: April 5, 2025
+- Data Integration: April 8, 2025
+- Core System Functionality: April 11, 2025
+- Analytics Layer: April 14, 2025
+- Agentic Architecture & Deployment: April 17, 2025
+- Project Documentation: April 18, 2025
+- Project Presentation & Demonstration: April 19, 2025
 
 ## Conclusion
 
