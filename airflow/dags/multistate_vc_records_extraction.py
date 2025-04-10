@@ -1,3 +1,4 @@
+import json
 from airflow import DAG
 from airflow.decorators import dag, task, task_group
 from airflow.models import Variable
@@ -27,14 +28,14 @@ from services.mistral_orc_processing import pdf_mistralocr_converter
     catchup=False,
     tags=['vc_scraper', 'grouped'],
     max_active_runs=1,
-    max_active_tasks=3
+    max_active_tasks=2
 )
 def vc_state_pipeline():
 
     @task
     def get_states():
-        # You can also fetch this from Airflow Variables or a config file
-        return ["California", "Texas", "Massachusetts"]
+        states_raw = Variable.get("VC_STATE_LIST", default_var='["California", "Texas", "Massachusetts"]')
+        return json.loads(states_raw)
 
     @task_group
     def process_state(state: str):
@@ -50,8 +51,12 @@ def vc_state_pipeline():
                 command_executor="http://selenium-chrome:4444/wd/hub",
                 options=chrome_options
             )
-
-            url = f"https://nvca.org/document/{state.lower()}-vc-state-data/"
+            # Airflow Variable - ["Alaska","New-York","Alaska","Arizona","Arkansas","California","Colorado","Connecticut","Delaware","Florida","Georgia","Hawaii","Idaho","Illinois","Indiana","Iowa","Kansas","Kentucky","Louisiana","Maine","Maryland","Massachusetts","Michigan","Minnesota","Mississippi","Missouri","Montana","Nebraska","Nevada","New-Hampshire","New-Jersey","New-Mexico","North-Carolina","North-Dakota","Ohio","Oklahoma","Oregon","Pennsylvania","Road-Island","South-Carolina","South-Dakota","Tennessee","Texas","Utah","Vermont","Virginia","Washington","West-Virginia", "Wisconsin", "Wyoming"]
+            #base_url="https://nvca.org/research/venture-across-america/"
+            if state == "South-Dakota":
+                url = "https://nvca.org/document/south-dakota/"
+            else:
+                url = f"https://nvca.org/document/{state.lower()}-vc-state-data/"
             driver.get(url)
 
             try:
@@ -81,7 +86,7 @@ def vc_state_pipeline():
             return upload_pdf_to_s3(pdf_url, state)
 
         @task
-        def run_mistral_ocr(s3_path: str, state: str) -> str:
+        def process_via_mistral_ocr(s3_path: str, state: str) -> str:
             print(f"🔍 Running Mistral OCR for: {state}")
             AWS_BUCKET_NAME = Variable.get("AWS_BUCKET_NAME")
             s3_obj = S3FileManager(AWS_BUCKET_NAME, s3_path)
@@ -93,7 +98,7 @@ def vc_state_pipeline():
             return file_name
 
         # Wire up the tasks inside the group
-        run_mistral_ocr(
+        process_via_mistral_ocr(
             s3_path=upload_to_s3(
                 pdf_url=fetch_pdf_link(state),
                 state=state
