@@ -25,7 +25,6 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 default_args = {
-    'owner': 'data_analyst',
     'depends_on_past': False,
     'start_date': datetime(2025, 4, 8),
     'email_on_failure': False,
@@ -39,7 +38,7 @@ dag = DAG(
     default_args=default_args,
     description='Scrape SBA business structure information using Selenium',
     schedule_interval='@weekly',
-    tags=["VC", "scraping", "markdown"],
+    tags=["vc_reports", "scraping", "markdown"],
     catchup=False
 )
 
