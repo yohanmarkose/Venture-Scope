@@ -1,10 +1,15 @@
+import io
+from pathlib import Path
 from airflow import DAG
 from airflow.operators.python import PythonOperator
+from airflow.models import Variable
 from datetime import datetime, timedelta
 import os
 import time
 import logging
-from links_to_s3_push import upload_pdf_to_s3
+from services.links_to_s3_push import upload_pdf_to_s3
+from services.mistral_orc_processing import pdf_mistralocr_converter
+from services.s3 import S3FileManager
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
@@ -73,6 +78,25 @@ def initialize_selenium():
     driver.implicitly_wait(10)
     return driver
 
+def run_mistral_ocr_pipeline(ti, **kwargs):
+       
+    AWS_BUCKET_NAME = Variable.get("AWS_BUCKET_NAME")
+    s3_path = ti.xcom_pull(task_ids="pdf_s3_upload", key="s3_pdf_path")
+
+    if not s3_path:
+        raise ValueError("❌ No S3 path returned from pdf_s3_upload")
+
+    s3_obj = S3FileManager(AWS_BUCKET_NAME, s3_path)
+    pdf_file = s3_obj.load_s3_pdf(s3_path)
+    pdf_stream = io.BytesIO(pdf_file)
+
+    output_path = f"{Path(s3_path).parent}/mistral"
+    file_name, markdown_content = pdf_mistralocr_converter(pdf_stream, output_path, s3_obj)
+
+    ti.xcom_push(key="markdown_path", value=file_name)
+    print(f"✅ Markdown written to: {file_name}")
+
+
 def scrape_pdf_links(ti,**kwargs):
 
     statename = kwargs['dag_run'].conf.get('statename', 'Massachusetts')
@@ -122,5 +146,11 @@ pdf_s3_upload = PythonOperator(
     dag=dag
 )
 
+pdf_mistral_processing = PythonOperator(
+    task_id='mistral_ocr_cleanup',
+    python_callable=run_mistral_ocr_pipeline,
+    dag=dag
+)
+
 # Define task dependencies
-pdf_links >> pdf_s3_upload 
+pdf_links >> pdf_s3_upload >> pdf_mistral_processing
