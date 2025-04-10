@@ -22,20 +22,36 @@ async def process_citydata(ctx: RunContextWrapper, input_data: CityData):
    print(f"citydata: {input_data.places}")
    
 
-itineraryagent = Agent(
-        name="Business Itinerary Agent",
-        instructions="You are a business consultant. You are given an industry, product, location/city, size and additional details. You need to give a complete proposal for the business. The proposal should include the following: 1. Business Plan 2. Market Research 3. Financial Projections 4. Marketing Strategy 5. Operational Plan 6. Competitors in region 7. Management Team 8. Funding Requirements",
+businessagent = Agent(
+        name = "Business Proposal Agent",
+        instructions = """You are a business consultant. 
+                            You are given an industry, product, location/city, size of the company and Unique Selling Proposition. 
+                            You need to give a complete proposal for the business. 
+                            The proposal should include the following: 
+                            1. Business Plan 
+                            2. Market Research 
+                            3. Financial Projections 
+                            4. Marketing Strategy 
+                            5. Operational Plan 
+                            6. Competitors in region 
+                            7. Management Team 
+                            8. Funding Requirements""",
     )
 
 locationagent = Agent(
-        name='Location Agent',
-        instructions="Based on the business proposal, you need to find the best location for the business. Include competitors in this said location to support your decisions. You need to provide a list of places that are suitable for the business. The list should include the following: 1. City 2. State 3. Country 4. Population 5. Cost of Living 6. Business Environment 7. Infrastructure. Based on the locations identified, you need to provide a list of competitors in the region. The list should include the following: 1. Name 2. Industry 3. Location 4. Size 5. Revenue 6. Market Share",
+        name = 'Location Agent',
+        instructions = """Based on the business proposal, you need to find the best location for the business. 
+                            Include competitors in this said location to support your decisions.
+                            The output strictly has to be JSON formatted. 
+                            You need to provide a list of places that are suitable for the business. 
+                            The list should include the following: 1. City 2. State 3. Country 4. Population 5. Cost of Living 6. Business Environment 7. Infrastructure. 
+                            Based on the locations identified, you need to provide a list of competitors in the region. The list should include the following: 1. Name 2. Industry 3. Location 4. Size 5. Revenue 6. Market Share""",
         # handoffs=[handoff(agent=cityagent, on_handoff=process_citydata, input_type=CityData)]
     )
 
 synthesizer_agent = Agent(
     name="synthesizer_agent",
-    instructions="You take the input and then build the complete business proposal around it",
+    instructions="You take the input and then output one JSON object (locations, competitors) without the ticks to pass it to our API for processing. Strictly use JSON format for competitors. Strictly use JSON format for the ideal locations.",
 )
 
 async def main():
@@ -45,13 +61,13 @@ async def main():
         "product": input("What is going to be your product? "),
         "location/city": input("What city is ideal for you? "),
         "size": input("What is the size of business (Ex. Startup, SME, MNC)? "),
-        "additional_details": input("Any notes you might want to add? ")
+        "usp": input("What is your Unique Selling Proposition? ")
     }
 
     raw_info = "\n".join(f"{k}: {v}" for k, v in business_info.items())
 
     first_result = await Runner.run(
-        itineraryagent,raw_info
+        businessagent,raw_info
     )
 
     # print(first_result.final_output)
