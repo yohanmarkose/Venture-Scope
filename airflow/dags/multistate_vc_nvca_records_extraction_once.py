@@ -18,13 +18,13 @@ from services.mistral_orc_processing import pdf_mistralocr_converter
 
 
 @dag(
-    dag_id='scrape_nvca_vc_statewise_grouped',
+    dag_id='scrape_nvca_vc_statewise_grouped_once',
     default_args={
         'owner': 'data_team',
         'start_date': days_ago(1),
         'retries': 1,
     },
-    schedule_interval='@weekly',
+    schedule_interval='@once',
     catchup=False,
     tags=["vc_reports", "scraping", "markdown"],
     max_active_runs=1,
