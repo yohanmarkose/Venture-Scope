@@ -1,11 +1,11 @@
 import asyncio
 import os
 from dotenv import load_dotenv
-from agents import Runner,handoff
+from agents import Runner, handoff, set_tracing_export_api_key, RunContextWrapper
 from agents_mcp import Agent, RunnerContext
 from openai import OpenAI
 from pydantic import BaseModel
-from agents import set_tracing_export_api_key, RunContextWrapper
+
 load_dotenv()
 
 api_key=os.getenv("OPENAI_API_KEY")
@@ -24,29 +24,51 @@ async def process_citydata(ctx: RunContextWrapper, input_data: CityData):
 
 businessagent = Agent(
         name = "Business Proposal Agent",
-        instructions = """You are a business consultant. 
-                            You are given an industry, product, location/city, size of the company and Unique Selling Proposition. 
-                            You need to give a complete proposal for the business. 
-                            The proposal should include the following: 
-                            1. Business Plan 
-                            2. Market Research 
-                            3. Financial Projections 
-                            4. Marketing Strategy 
-                            5. Operational Plan 
-                            6. Competitors in region 
-                            7. Management Team 
-                            8. Funding Requirements""",
+        instructions = """You are an elite location strategy business consultant with 20+ years of experience in site selection, competitive analysis, and market entry planning exclusively within the United States. 
+                            Your analyses have guided Fortune 500 companies and high-growth startups to identify optimal locations that maximize profitability and market penetration. 
+                            You are given an industry, product, preffered (city, state), budget range, size of the company and Unique Selling Proposition. 
+                            Taking into account the information you have, generate a detailed report that includes the following:
+                            1. Industry Overview: Provide a brief overview of the industry, including current trends and growth potential.
+                            2. Market Analysis: Analyze the market potential for the product in the specified location, including target demographics and demand.
+                            3. Location Suitability: Evaluate the suitability of the areas in the preferred cities for the business, considering factors such as cost of living, infrastructure, and local regulations.
+                            4. Competitive Landscape: Identify key competitors in the area and analyze their strengths and weaknesses.
+                            5. Financial Projections: Offer financial projections, including estimated costs, revenues, and return on investment.
+                            6. Risk Assessment: Identify potential risks and challenges associated with the business in the specified location, along with mitigation strategies.
+                            7. Recommendations: Provide actionable recommendations for the business, including potential locations, marketing strategies, and partnerships.
+                            8. Conclusion: Summarize the key findings and recommendations in a clear and concise manner.
+                            """,
     )
 
 locationagent = Agent(
         name = 'Location Agent',
-        instructions = """Based on the business proposal, you need to find the best location for the business. 
-                            Include competitors in this said location to support your decisions.
+        instructions = """Based on the business proposal, you need to find the top 3 locations for the business. 
+                            Include competitors in these said location to support your decisions.
                             The output strictly has to be JSON formatted. 
-                            You need to provide a list of places that are suitable for the business. 
-                            The list should include the following: 1. City 2. State 3. Country 4. Population 5. Cost of Living 6. Business Environment 7. Infrastructure. 
-                            Based on the locations identified, you need to provide a list of competitors in the region. The list should include the following: 1. Name 2. Industry 3. Location 4. Size 5. Revenue 6. Market Share""",
-        # handoffs=[handoff(agent=cityagent, on_handoff=process_citydata, input_type=CityData)]
+                            You need to provide a list of places that are suitable for the business in and around the mentioned cities. 
+                                The list should strictly include the following: 
+                                    1. Area
+                                    2. City, State
+                                    3. Population Density (Low, Medium, High)
+                                    4. Cost of Living (Low, Medium, High)
+                                    5. Business Climate
+                                    6. Quality of Life
+                                    7. Infrastructure
+                                    8. Suitability Score (1-10)
+                                    9. Risk Score (1-10)
+                                    10. Advantages [List]
+                                    11. Challenges [List]
+                                    12. Competitors 
+                            Based on the locations identified, you need to find the list of top 5 competitors in the region. 
+                                The list should strictly include the following: 
+                                    1. Name 
+                                    2. Industry 
+                                    3. Location 
+                                    4. Size 
+                                    5. Revenue 
+                                    6. Market Share
+                                    7. Unique Selling Proposition
+                                    8. Growth Score (1-10)
+                                    9. Customer Satisfaction Score (1-10)""",
     )
 
 synthesizer_agent = Agent(
@@ -60,8 +82,9 @@ async def main():
         "industry": input("What is the industry for your business? "),
         "product": input("What is going to be your product? "),
         "location/city": input("What city is ideal for you? "),
+        "budget": input("What is your budget range? (Ex. 1000-5000) "),
         "size": input("What is the size of business (Ex. Startup, SME, MNC)? "),
-        "usp": input("What is your Unique Selling Proposition? ")
+        "unique_selling_proposition": input("What is your Unique Selling Proposition? ")
     }
 
     raw_info = "\n".join(f"{k}: {v}" for k, v in business_info.items())
