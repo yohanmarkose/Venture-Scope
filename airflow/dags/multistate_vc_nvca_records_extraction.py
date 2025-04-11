@@ -26,7 +26,7 @@ from services.mistral_orc_processing import pdf_mistralocr_converter
     },
     schedule_interval='@weekly',
     catchup=False,
-    tags=['vc_scraper', 'grouped'],
+    tags=["vc_reports", "scraping", "markdown"],
     max_active_runs=1,
     max_active_tasks=2
 )
