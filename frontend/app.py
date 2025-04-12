@@ -33,6 +33,7 @@ def main():
     selected_city = st.sidebar.multiselect("Ideal Business Location", sorted(cities))
     budget_range = st.sidebar.slider("Select Budget Range", 10000, 1000000, (100000, 500000))
     
+    st.write("Type", type(budget_range))
     # Initialize session state for products
     if "products" not in st.session_state:
         st.session_state.products = []
@@ -64,7 +65,7 @@ def main():
     additional_details = st.sidebar.text_area("What is your Unique Selling Proposition?")
     
     if st.sidebar.button("Submit"):
-        if st.session_state.products is None:
+        if len(st.session_state.products) > 0:
             # Here you would call the backend API with the selected options
             # For now, we will just display a success message
             placeholder = st.empty()  # Create an empty placeholder
