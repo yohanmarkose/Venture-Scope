@@ -1,18 +1,16 @@
 import asyncio
 import os
 from dotenv import load_dotenv
-from agents import Runner, handoff, set_tracing_export_api_key, RunContextWrapper
+from agents import Runner, handoff, set_tracing_export_api_key, RunContextWrapper, enable_verbose_stdout_logging
 from agents_mcp import Agent, RunnerContext
 from openai import OpenAI
 from pydantic import BaseModel
 
 load_dotenv()
 
-api_key=os.getenv("OPENAI_API_KEY")
-set_tracing_export_api_key(api_key=api_key)
+enable_verbose_stdout_logging()
 
-
-mcp_config_path = "mcp_agent_config.yaml"
+mcp_config_path = "mcp_agent.config.yaml"
 context = RunnerContext(mcp_config_path=mcp_config_path)
 
 class CityData(BaseModel):
@@ -39,9 +37,9 @@ businessagent = Agent(
                             """,
     )
 
-locationagent = Agent(
+locationagent: Agent = Agent(
         name = 'Location Agent',
-        instructions = """Based on the business proposal, you need to find the top 3 locations for the business. 
+        instructions = """You are an assitant able to interact with Google Maps API integration with MCP. Use the tools and based on the business proposal, you need to find the top 3 locations for the business. 
                             Include competitors in these said location to support your decisions.
                             The output strictly has to be JSON formatted. 
                             You need to provide a list of places that are suitable for the business in and around the mentioned cities. 
@@ -55,20 +53,24 @@ locationagent = Agent(
                                     7. Infrastructure
                                     8. Suitability Score (1-10)
                                     9. Risk Score (1-10)
-                                    10. Advantages [List]
-                                    11. Challenges [List]
+                                    10. Advantages [List] (in detail)
+                                    11. Challenges [List] (in detail)
                                     12. Competitors 
-                            Based on the locations identified, you need to find the list of top 5 competitors in the region. 
+                            For each locations identified, you need to find the list of top 5 competitors in the area. 
                                 The list should strictly include the following: 
                                     1. Name 
                                     2. Industry 
-                                    3. Location 
+                                    3. Address 
                                     4. Size 
                                     5. Revenue 
                                     6. Market Share
                                     7. Unique Selling Proposition
                                     8. Growth Score (1-10)
-                                    9. Customer Satisfaction Score (1-10)""",
+                                    9. Customer Satisfaction Score (1-10)
+                                    10. Reviews [List]
+                                    11. Rating""",
+        # tools = ["maps_search_places", "maps_place_details"],
+        # mcp_servers=["google-maps"],
     )
 
 synthesizer_agent = Agent(
@@ -88,9 +90,11 @@ async def main():
     }
 
     raw_info = "\n".join(f"{k}: {v}" for k, v in business_info.items())
+    
+    context = RunnerContext()
 
     first_result = await Runner.run(
-        businessagent,raw_info
+        businessagent,raw_info, 
     )
 
     # print(first_result.final_output)
