@@ -176,5 +176,6 @@ cython_debug/
 # PyPI configuration file
 .pypirc
 
-*logs*
-*plugins*
+# Airflow
+*airflow/logs*
+*airflow/plugins*

@@ -59,8 +59,7 @@ x-airflow-common:
     AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
     AIRFLOW__CORE__LOAD_EXAMPLES: 'true'
     AIRFLOW__API__AUTH_BACKENDS: 'airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session'
-    
-    _PIP_ADDITIONAL_REQUIREMENTS: "selenium chromadb openai boto3 beautifulsoup4 webdriver-manager pandas mistralai Pillow"
+    _PIP_ADDITIONAL_REQUIREMENTS: "apache-airflow-providers-snowflake selenium chromadb openai boto3 beautifulsoup4 webdriver-manager pandas mistralai Pillow yfinance"
   volumes:
     - ${AIRFLOW_PROJ_DIR:-.}/dags:/opt/airflow/dags
     - ${AIRFLOW_PROJ_DIR:-.}/logs:/opt/airflow/logs
