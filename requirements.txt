@@ -4,4 +4,6 @@ pandas
 numpy
 openai-tools
 openai-agents
-openai-agents-mcp
+pinecone
+boto3
+spacy
