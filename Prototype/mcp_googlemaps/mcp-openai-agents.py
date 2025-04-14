@@ -1,26 +1,19 @@
 import asyncio
-import os
+import shutil, os
 from dotenv import load_dotenv
-from agents import Runner, handoff, set_tracing_export_api_key, RunContextWrapper, enable_verbose_stdout_logging
-from agents_mcp import Agent, RunnerContext
-from openai import OpenAI
-from pydantic import BaseModel
+from agents import Agent, Runner, trace
+from agents.mcp import MCPServer, MCPServerStdio
 
 load_dotenv()
 
-enable_verbose_stdout_logging()
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+GOOGLE_MAPS_API_KEY = os.getenv("GOOGLE_MAPS_API_KEY")
 
-mcp_config_path = "mcp_agent.config.yaml"
-context = RunnerContext(mcp_config_path=mcp_config_path)
+async def run(mcp_server: MCPServer, query: str):
 
-class CityData(BaseModel):
-   places: str
-   
-async def process_citydata(ctx: RunContextWrapper, input_data: CityData):
-   print(f"citydata: {input_data.places}")
-   
-
-businessagent = Agent(
+    # context = RunnerContext() 
+    
+    businessagent: Agent = Agent(
         name = "Business Proposal Agent",
         instructions = """You are an elite location strategy business consultant with 20+ years of experience in site selection, competitive analysis, and market entry planning exclusively within the United States. 
                             Your analyses have guided Fortune 500 companies and high-growth startups to identify optimal locations that maximize profitability and market penetration. 
@@ -35,11 +28,15 @@ businessagent = Agent(
                             7. Recommendations: Provide actionable recommendations for the business, including potential locations, marketing strategies, and partnerships.
                             8. Conclusion: Summarize the key findings and recommendations in a clear and concise manner.
                             """,
+        model = "gpt-4o-mini",
     )
+    
+    business_result = await Runner.run(businessagent, query)
+    # print("Business Result: ", business_result.final_output)    
 
-locationagent: Agent = Agent(
+    locationagent: Agent = Agent(
         name = 'Location Agent',
-        instructions = """You are an assitant able to interact with Google Maps API integration with MCP. Use the tools and based on the business proposal, you need to find the top 3 locations for the business. 
+        instructions = """You are an assitant able to use the Google Maps tools that are available in the MCP server.. Use the tools and based on the business proposal, you need to find the top 3 locations for the business. 
                             Include competitors in these said location to support your decisions.
                             The output strictly has to be JSON formatted. 
                             You need to provide a list of places that are suitable for the business in and around the mentioned cities. 
@@ -69,47 +66,47 @@ locationagent: Agent = Agent(
                                     9. Customer Satisfaction Score (1-10)
                                     10. Reviews [List]
                                     11. Rating""",
-        # tools = ["maps_search_places", "maps_place_details"],
-        # mcp_servers=["google-maps"],
+        mcp_servers=[mcp_server],
+        model = "gpt-4o-mini",
     )
+    
+    location_result = await Runner.run(locationagent, business_result.final_output)
+    # print("Location Result: ", location_result.final_output)
 
-synthesizer_agent = Agent(
-    name="synthesizer_agent",
-    instructions="You take the input and then output one JSON object (locations, competitors) without the ticks to pass it to our API for processing. Strictly use JSON format for competitors. Strictly use JSON format for the ideal locations.",
-)
+    synthesizer_agent = Agent(
+        name="synthesizer_agent",
+        instructions="""You take the input and then output one JSON object (locations, competitors) without the ticks to pass it to our API for processing. 
+                        Strictly use JSON format for competitors. Strictly use JSON format for the ideal locations.""",
+        model = "gpt-4o-mini",
+    )
+    
+    synthesizer_result = await Runner.run(synthesizer_agent, location_result.final_output)
+    print("Synthesizer Result: \n", synthesizer_result.final_output)
 
+    # result = await Runner.run(starting_agent=agent, input=query)
+    # print(result.final_output)
+    
 async def main():
-    
-    business_info = {
-        "industry": input("What is the industry for your business? "),
-        "product": input("What is going to be your product? "),
-        "location/city": input("What city is ideal for you? "),
-        "budget": input("What is your budget range? (Ex. 1000-5000) "),
-        "size": input("What is the size of business (Ex. Startup, SME, MNC)? "),
-        "unique_selling_proposition": input("What is your Unique Selling Proposition? ")
+    # Ask the user for the directory path
+    # query = input("Please enter the query: ")
+    query = {
+        "industry": "Food and Beverage",
+        "product": "Coffee, Tea, Sides, Pastries",
+        "location/city": "Manhattan, New York",
+        "budget": "120000 - 300000",
+        "size": "Small Enterprise",
+        "unique_selling_proposition": "High Quality, Organic, Locally Sourced Ingredients"
     }
+    query = "\n".join(f"{k}: {v}" for k, v in query.items())
 
-    raw_info = "\n".join(f"{k}: {v}" for k, v in business_info.items())
-    
-    context = RunnerContext()
-
-    first_result = await Runner.run(
-        businessagent,raw_info, 
-    )
-
-    # print(first_result.final_output)
-    
-    second_result = await Runner.run(
-        locationagent, first_result.final_output, context=context
-    )
-
-    # print(second_result.final_output)
-
-    third_result = await Runner.run(
-        synthesizer_agent, second_result.final_output
-    )
-
-    print(third_result.final_output)
+    async with MCPServerStdio(
+        cache_tools_list=True,  # Cache the tools list, for demonstration
+        params={"command": "npx", "args": ["-y", "@modelcontextprotocol/server-google-maps"], "env": {"GOOGLE_MAPS_API_KEY": f"{GOOGLE_MAPS_API_KEY}"}},
+    ) as server:
+        # tools = await server.list_tools()
+        # print(tools)
+        with trace(workflow_name="MCP Google Maps - Location Intelligence for Business"):
+            await run(server, query)
 
 
 if __name__ == "__main__":

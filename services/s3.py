@@ -1,16 +1,15 @@
-from http.client import HTTPException
 import boto3
 import json
 from datetime import datetime, timedelta
 import boto3.s3.transfer as transfer
-import subprocess
-from airflow.models import TaskInstance
-from airflow.models import Variable
+import os
+from dotenv import load_dotenv
+load_dotenv()
 
 # Read values
-AWS_BUCKET_NAME = Variable.get("AWS_BUCKET_NAME")
-AWS_ACCESS_KEY_ID = Variable.get("AWS_ACCESS_KEY_ID")
-AWS_SECRET_ACCESS_KEY = Variable.get("AWS_SECRET_ACCESS_KEY")
+AWS_BUCKET_NAME = os.getenv("AWS_BUCKET_NAME")
+AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID")
+AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY")
 
 class S3FileManager:
     def __init__(self, bucket_name, base_path=''):
@@ -33,16 +32,8 @@ class S3FileManager:
             content = response['Body'].read().decode('utf-8')
             return content
         except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Error loading file {file_name}: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"Error loading file {file_key}: {str(e)}")
     
-    def load_s3_pdf(self, file_name):
-        try:
-            response = self.s3.get_object(Bucket=self.bucket_name, Key=file_name)
-            content = response['Body'].read()
-            return content
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Error loading file {file_name}: {str(e)}")
-
     def upload_file(self, bucket_name, file_name, content):
         self.s3.put_object(Bucket=bucket_name, Key=file_name, Body=content)
     
