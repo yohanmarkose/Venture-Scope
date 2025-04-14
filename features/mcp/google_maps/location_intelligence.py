@@ -54,17 +54,18 @@ async def run_location_intelligence(mcp_server: MCPServer, query: str):
                             You need to provide a list of places that are suitable for the business in and around the mentioned cities. 
                                 The list should strictly include the following: 
                                     1. Area
-                                    2. City, State
-                                    3. Population Density (Low, Medium, High)
-                                    4. Cost of Living (Low, Medium, High)
-                                    5. Business Climate
-                                    6. Quality of Life
-                                    7. Infrastructure
-                                    8. Suitability Score (1-10)
-                                    9. Risk Score (1-10)
-                                    10. Advantages [List] (in detail)
-                                    11. Challenges [List] (in detail)
-                                    12. Competitors 
+                                    2. City
+                                    3. State
+                                    4. Population Density (Low, Medium, High)
+                                    5. Cost of Living (Low, Medium, High)
+                                    6. Business Climate
+                                    7. Quality of Life
+                                    8. Infrastructure
+                                    9. Suitability Score (1-10)
+                                    10. Risk Score (1-10)
+                                    11. Advantages [List] (in detail)
+                                    12. Challenges [List] (in detail)
+                                    13. Competitors 
                             For each locations identified, you need to find the list of top 5 competitors in the area. 
                                 The list should strictly include the following: 
                                     1. Name 

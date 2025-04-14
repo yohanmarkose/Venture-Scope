@@ -48,6 +48,7 @@ class Competitor(BaseModel):
 class Location(BaseModel):
     area: str
     city: str
+    state: str
     population_density: str
     cost_of_living: str
     business_climate: str
