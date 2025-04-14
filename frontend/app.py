@@ -11,13 +11,17 @@ def load_cities():
 @st.cache_data
 def load_industries():
     industries = [
-        "Consumer Products & Services",
-        "Financial Services",
-        "Information Technology",
-        "Retail",
-        "Material & Resources",
-        "Others"
-        ]
+        "Education & Training",
+        "Finance & Insurance",
+        "Healthcare & Life Sciences",
+        "Information Technology & Software",
+        "Manufacturing & Industrial",
+        "Media & Entertainment",
+        "Professional Services",
+        "Public Sector & Nonprofit",
+        "Retail & Consumer Goods",
+        "Transportation & Logistics"
+    ]
     return industries
 
 def main():
