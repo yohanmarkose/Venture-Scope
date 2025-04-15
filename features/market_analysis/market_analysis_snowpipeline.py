@@ -1,4 +1,7 @@
 import snowflake.connector
+from dotenv import load_dotenv
+import os
+
 import logging
 
 def main():
@@ -6,16 +9,18 @@ def main():
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
     # Set your connection parameters; update these with your actual credentials and environment details.
+    load_dotenv()
+
     conn_params = {
-        'user': 'YOUR_USERNAME',
-        'password': 'YOUR_PASSWORD',
-        'account': 'YOUR_ACCOUNT',
-        'warehouse': 'YOUR_WAREHOUSE',
-        'database': 'YOUR_DATABASE',
-        'schema': 'YOUR_SCHEMA',    # Note: not all queries use this default schema.
-        'role': 'YOUR_ROLE'         # Optional: You can also include the role.
+        'user': os.getenv('SNOWFLAKE_USER'),
+        'password': os.getenv('SNOWFLAKE_PASSWORD'),
+        'account': os.getenv('SNOWFLAKE_ACCOUNT'),
+        'warehouse': os.getenv('SNOWFLAKE_WAREHOUSE'),
+        'database': os.getenv('SNOWFLAKE_DATABASE'),
+        'schema': os.getenv('SNOWFLAKE_SCHEMA'),
+        'role': os.getenv('SNOWFLAKE_ROLE')
     }
-    
+        
     try:
         # Establish connection to Snowflake
         ctx = snowflake.connector.connect(

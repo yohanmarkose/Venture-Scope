@@ -1,6 +1,13 @@
 import streamlit as st
 import pandas as pd
 import time
+import requests
+from dotenv import load_dotenv
+import os
+
+load_dotenv()
+
+API_URL = os.getenv("API_URL", "http://127.0.0.1:8000")
 
 @st.cache_data
 def load_cities():
@@ -86,6 +93,16 @@ def main():
                 col1.metric("Market Size", "$4.2T")
                 col2.metric("Growth Rate", "5.8%")
                 st.write("The healthcare industry includes providers, payers, and life sciences.")
+                try:
+                    response = requests.post(f"{API_URL}/market_analysis", json={"products": st.session_state.products, "domain": selected_industry, "size_category": "large"})
+                    if response.status_code == 200:
+                        print("request success")
+                        answer = response.json()["answer"]
+                        st.markdown(answer)
+                    else:
+                        st.error(f"Error: {response.text}")
+                except Exception as e:
+                    st.error(f"Error: {str(e)}")
 
             with trends:
                 st.subheader("Finance Overview")
@@ -102,6 +119,7 @@ def main():
             st.session_state.products.clear()  # Clear the products list after submission
         else:
             st.error("Please add at least one product before submitting.")
+
             
 if __name__ == "__main__":
     # Set page configuration
