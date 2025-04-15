@@ -11,3 +11,4 @@ asyncio
 aiohttp
 mcp
 mcp-agent
+plotly
