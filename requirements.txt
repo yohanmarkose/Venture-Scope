@@ -7,3 +7,5 @@ openai-agents
 pinecone
 boto3
 spacy
+asyncio
+aiohttp
