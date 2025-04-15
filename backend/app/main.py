@@ -176,7 +176,7 @@ def read_root():
 
 
 @app.post("/market_analysis")
-def query_nvdia_documents(query: BusinessQuery):
+def market_analysis(query: BusinessQuery):
     try:
         formatted_query = {
             "industry": query.industry,
@@ -199,6 +199,7 @@ def query_nvdia_documents(query: BusinessQuery):
             "industry": industry,
             "size_category": size_category
         })
+
 
         print(out)
         answer = out["intermediate_steps"][-1].tool_input
