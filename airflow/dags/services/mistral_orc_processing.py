@@ -1,17 +1,18 @@
 import os, io, json, base64
 from pathlib import Path
 from dotenv import load_dotenv
-load_dotenv()
 from PIL import Image
 from mistralai import Mistral
 from mistralai import DocumentURLChunk
 from mistralai.models import OCRResponse
+from airflow.models import Variable
+
 
 # from services import s3
 from services.s3 import S3FileManager
 
-AWS_BUCKET_NAME = os.getenv("AWS_BUCKET_NAME")
-MISTRALAI_API_KEY = os.getenv("MISTRALAI_API_KEY") 
+AWS_BUCKET_NAME = Variable.get("AWS_BUCKET_NAME")
+MISTRALAI_API_KEY = Variable.get("MISTRALAI_API_KEY") 
 
 def pdf_mistralocr_converter(pdf_stream: io.BytesIO, base_path, s3_obj):
     client = Mistral(api_key=MISTRALAI_API_KEY)
