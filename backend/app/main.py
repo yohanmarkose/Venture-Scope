@@ -4,11 +4,13 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 from typing import List, Dict, Any, Optional, Tuple, Union
 from features.mcp.google_maps.location_intelligence import start_location_intelligence
+from features.ma_agent import run_agents
 import asyncio
 import aiohttp
 from concurrent.futures import ThreadPoolExecutor
 from dotenv import load_dotenv
 load_dotenv()
+import openai
 
 class MarketAnalysisRequest(BaseModel):
     domain: str
@@ -174,12 +176,21 @@ def read_root():
 
 
 @app.post("/market_analysis")
-def query_nvdia_documents(request: MarketAnalysisRequest):
+def query_nvdia_documents(query: BusinessQuery):
     try:
-        size_category = request.size_category
+        formatted_query = {
+            "industry": query.industry,
+            "product": ", ".join(query.product),
+            "location/city": ", ".join(query.location_city),
+            "budget": f"{query.budget[0]} - {query.budget[1]}",
+            "size": query.size,
+            "unique_selling_proposition": query.unique_selling_proposition or ""
+        }
+        # size_category = formatted_query["size"]
+        size_category = None
         
         # Get industry from the domain and products
-        industry = classify_industry(request.domain, request.products)
+        industry = classify_industry(formatted_query["industry"], formatted_query["product"])
         print("Industry selected is:", industry)    
 
         runnable = run_agents(industry, size_category)
