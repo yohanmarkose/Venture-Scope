@@ -375,7 +375,7 @@ def display_locations(locations):
                         """, unsafe_allow_html=True)
             
             with cols[1]:
-                st.markdown("<div style='font-weight:600; margin-bottom:12px;'>Suitability Analysis</div>", unsafe_allow_html=True)
+                st.markdown("<div style='font-weight:600; margin-bottom:12px; text-align:center;'>Suitability Analysis</div>", unsafe_allow_html=True)
                 
                 # Create suitability score gauge exactly like mockup
                 fig_suitability = go.Figure(go.Indicator(
@@ -402,8 +402,24 @@ def display_locations(locations):
                     }
                 ))
                 
-                fig_suitability.update_layout(height=200, margin=dict(l=30, r=30, t=30, b=20))
+                fig_suitability.update_layout(
+                    height=200, 
+                    margin=dict(l=30, r=30, t=50, b=20),
+                    annotations=[
+                        dict(
+                            x=0.5,
+                            y=0.1,
+                            text=f"{location.get('suitability_score', 0)}",
+                            font=dict(size=44, color="#475569"),
+                            showarrow=False
+                        )
+                    ],
+                    showlegend=False,
+                )
+                fig_suitability.data[0].mode = "gauge"
                 st.plotly_chart(fig_suitability, use_container_width=True, key=f"suitability_{i}")
+
+                st.markdown("<div style='font-weight:600; margin-bottom:12px; text-align:center;'>Risk Analysis</div>", unsafe_allow_html=True)
                 
                 # Create risk score gauge
                 fig_risk = go.Figure(go.Indicator(
@@ -430,7 +446,22 @@ def display_locations(locations):
                     }
                 ))
                 
-                fig_risk.update_layout(height=200, margin=dict(l=30, r=30, t=30, b=20))
+                fig_risk.update_layout(
+                    height=200, 
+                    margin=dict(l=30, r=30, t=50, b=20),
+                    annotations=[
+                        dict(
+                            x=0.5,
+                            y=0.1,
+                            text=f"{location.get('risk_score', 0)}",
+                            font=dict(size=44, color="#475569"),
+                            showarrow=False
+                        )
+                    ],
+                    showlegend=False
+                )
+                
+                fig_risk.data[0].mode = "gauge"
                 st.plotly_chart(fig_risk, use_container_width=True, key=f"risk_{i}")
 
 def display_competitors(competitors):
