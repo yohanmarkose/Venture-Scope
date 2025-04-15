@@ -65,40 +65,6 @@ class Location(BaseModel):
 class LocationIntelligenceResponse(BaseModel):
     locations: List[Location]
     competitors: List[Competitor]
-    
-async def async_send_to_api(session, api, data):
-    """Send data to the API asynchronously and return the response"""
-    try:
-        async with session.post(f"{API_URL}/{api}", json=data, timeout=180) as response:
-            response.raise_for_status()
-            return await response.json()
-    except Exception as e:
-        return {"error": str(e)}
-    
-def run_async_calls(api_calls):
-    """Run multiple API calls asynchronously"""
-    results = {}
-    
-    async def fetch_all():
-        async with aiohttp.ClientSession() as session:
-            tasks = []
-            for api_name, api_endpoint, api_data in api_calls:
-                task = asyncio.create_task(async_send_to_api(session, api_endpoint, api_data))
-                tasks.append((api_name, task))
-            
-            # Wait for all tasks to complete
-            for api_name, task in tasks:
-                try:
-                    results[api_name] = await task
-                except Exception as e:
-                    results[api_name] = {"error": str(e)}
-    
-    # Run the async event loop in a separate thread
-    with ThreadPoolExecutor() as executor:
-        future = executor.submit(asyncio.run, fetch_all())
-        future.result()  # Wait for completion
-        
-    return results
 
 # API Endpoints    
 
