@@ -9,3 +9,5 @@ boto3
 spacy
 asyncio
 aiohttp
+mcp
+mcp-agent
