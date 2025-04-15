@@ -6,82 +6,176 @@ import json
 import asyncio
 import aiohttp
 from concurrent.futures import ThreadPoolExecutor
+import plotly.express as px
+import plotly.graph_objects as go
+from datetime import datetime
 
 # Set page configuration
 st.set_page_config(
-    page_title="Venture Scope",
+    page_title="Venture Scope | Business Location Intelligence",
+    page_icon="🌎",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# Custom CSS for styling
+# Custom CSS for styling to match mockups
 st.markdown("""
 <style>
-    .main-header {
-        font-size: 2.5rem;
-        font-weight: 700;
-        color: #1E88E5;
-        text-align: center;
-        margin-bottom: 1rem;
+    /* Typography */
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+    
+    * {
+        font-family: 'Inter', sans-serif;
     }
-    .subheader {
-        font-size: 1.8rem;
+    
+    h1, h2, h3, h4, h5 {
         font-weight: 600;
-        color: #0D47A1;
-        padding-top: 1rem;
     }
-    .card {
-        border-radius: 5px;
-        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-        padding: 1.5rem;
-        margin-bottom: 1rem;
+    
+    /* Tabs styling to match mockup */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 0px;
+        border-bottom: 1px solid #e2e8f0;
     }
-    .info-box {
-        background-color: #E3F2FD;
-        border-left: 5px solid #1E88E5;
-        padding: 1rem;
-        margin-bottom: 1rem;
+    
+    .stTabs [data-baseweb="tab"] {
+        padding: 10px 16px;
+        border: none;
+        background-color: transparent;
+        border-radius: 0;
     }
-    .success-box {
-        background-color: #E8F5E9;
-        border-left: 5px solid #4CAF50;
-        padding: 1rem;
-        margin-bottom: 1rem;
-    }
-    .warning-box {
-        background-color: #FFF8E1;
-        border-left: 5px solid #FFC107;
-        padding: 1rem;
-        margin-bottom: 1rem;
-    }
-    .metric-container {
-        background-color: #f7f7f7;
-        border-radius: 5px;
-        padding: 1rem;
-        text-align: center;
-        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
-    }
-    .metric-value {
-        font-size: 1.8rem;
-        font-weight: 700;
-        color: #1E88E5;
-    }
-    .metric-label {
-        font-size: 0.9rem;
-        color: #555;
-        margin-top: 0.3rem;
-    }
-    .list-item {
-        margin-bottom: 0.5rem;
-        margin-left: 1rem;
-        line-height: 1.6;
-    }
-    .sidebar-header {
-        font-size: 1.2rem;
+    
+    .stTabs [aria-selected="true"] {
+        background-color: transparent !important;
+        border-bottom: 2px solid #6366F1 !important;
         font-weight: 600;
-        margin-bottom: 1rem;
-        color: #0D47A1;
     }
+    
+    /* Location card styling */
+    .location-card {
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        overflow: hidden;
+        margin-bottom: 16px;
+    }
+    
+    .location-card-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        background-color: #f8fafc;
+        padding: 12px 16px;
+        border-bottom: 1px solid #e2e8f0;
+    }
+    
+    .location-card-body {
+        padding: 16px;
+    }
+    
+    /* Location profile table */
+    .profile-table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+    
+    .profile-table tr {
+        border-bottom: 1px solid #e2e8f0;
+    }
+    
+    .profile-table tr:last-child {
+        border-bottom: none;
+    }
+    
+    .profile-table td {
+        padding: 10px 0;
+    }
+    
+    .profile-table td:first-child {
+        font-weight: 500;
+        width: 40%;
+    }
+    
+    /* Advantages and challenges */
+    .advantage-item {
+        display: flex;
+        align-items: flex-start;
+        margin-bottom: 8px;
+    }
+    
+    .advantage-icon {
+        margin-right: 8px;
+        color: #10b981;
+    }
+    
+    .challenge-item {
+        display: flex;
+        align-items: flex-start;
+        margin-bottom: 8px;
+    }
+    
+    .challenge-icon {
+        margin-right: 8px;
+        color: #f59e0b;
+    }
+    
+    /* Section headers */
+    .section-header {
+        font-size: 1.25rem;
+        font-weight: 600;
+        margin-bottom: 16px;
+        padding-bottom: 8px;
+        border-bottom: 1px solid #e2e8f0;
+    }
+    
+    /* Map container */
+    .map-container {
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        overflow: hidden;
+        margin-bottom: 20px;
+    }
+    
+    /* Footer */
+    .footer {
+        margin-top: 40px;
+        padding-top: 20px;
+        border-top: 1px solid #e2e8f0;
+        text-align: center;
+        font-size: 0.875rem;
+        color: #64748b;
+    }
+    
+    /* Alert/info boxes */
+    .alert {
+        padding: 16px;
+        border-radius: 6px;
+        margin-bottom: 16px;
+    }
+    
+    .alert-info {
+        background-color: #eff6ff;
+        border-left: 4px solid #3b82f6;
+    }
+    
+    .alert-success {
+        background-color: #f0fdf4;
+        border-left: 4px solid #10b981;
+    }
+    
+    .alert-warning {
+        background-color: #fffbeb;
+        border-left: 4px solid #f59e0b;
+    }
+    
+    .alert-error {
+        background-color: #fef2f2;
+        border-left: 4px solid #ef4444;
+    }
+    
+    /* Remove Streamlit branding */
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    .reportview-container .main footer {visibility: hidden;}
 </style>
 """, unsafe_allow_html=True)
 
@@ -90,9 +184,14 @@ API_URL = "http://localhost:8000"
 
 @st.cache_data
 def load_cities():
-    df = pd.read_csv("frontend/uscities.csv")
-    df['city_state'] = df['city'] + ", " + df['state_name']
-    return df['city_state'].dropna().unique()
+    try:
+        df = pd.read_csv("frontend/uscities.csv")
+        df['city_state'] = df['city'] + ", " + df['state_name']
+        return df['city_state'].dropna().unique()
+    except Exception as e:
+        st.warning(f"Could not load cities data: {e}")
+        # Return a limited set as fallback
+        return ["New York, New York", "Chicago, Illinois", "Boston, Massachusetts"]
 
 @st.cache_data
 def load_industries():
@@ -144,149 +243,275 @@ def run_async_calls(api_calls):
         
     return results
 
-def display_locations(locations):
-    """Display the location intelligence results"""
+def create_location_map(locations):
+    """Create a map visualization of locations based on mockup"""
     if not locations:
+        return None
+    
+    # Create map data
+    map_data = []
+    for loc in locations:
+        # Mock coordinates - in production you would get real geocoding
+        if "Boston" in f"{loc.get('city')}, {loc.get('state')}":
+            lat, lon = 42.3601, -71.0589
+        elif "Chicago" in f"{loc.get('city')}, {loc.get('state')}":
+            lat, lon = 41.8781, -87.6298
+        elif "Manhattan" in f"{loc.get('city')}, {loc.get('state')}":
+            lat, lon = 40.7831, -73.9712
+        elif "New York" in f"{loc.get('city')}, {loc.get('state')}":
+            lat, lon = 40.7128, -74.0060
+        else:
+            # Default to center of US if no match
+            lat, lon = 37.0902, -95.7129
+        
+        map_data.append({
+            "location": f"{loc.get('area')}, {loc.get('city')}, {loc.get('state')}",
+            "lat": lat,
+            "lon": lon,
+            "suitability": loc.get('suitability_score', 5)
+        })
+    
+    if not map_data:
+        return None
+    
+    map_df = pd.DataFrame(map_data)
+    
+    # Create a map in the style of your mockup
+    fig = px.scatter_mapbox(
+        map_df,
+        lat="lat",
+        lon="lon",
+        size="suitability",
+        color="suitability",
+        color_continuous_scale=["#94a3b8", "#3b82f6", "#1d4ed8"],
+        size_max=20,
+        hover_name="location",
+        zoom=5,
+        mapbox_style="carto-positron"
+    )
+    
+    fig.update_layout(
+        margin={"r":0,"t":0,"l":0,"b":0},
+        height=400,
+        coloraxis_colorbar=dict(
+            title="Suitability",
+            tickvals=[min(map_df.suitability), max(map_df.suitability)],
+            ticktext=["Low", "High"]
+        )
+    )
+    
+    return fig
+
+def display_locations(locations):
+    """Display the location intelligence results styled according to the mockup"""
+    if not locations:
+        st.warning("No location data available. Please try adjusting your search criteria.")
         return
+        
+    # Display recommended locations
+    st.markdown('<div class="section-header">Recommended Locations</div>', unsafe_allow_html=True)
     
-    st.markdown("<div class='subheader'>Recommended Locations</div>", unsafe_allow_html=True)
+    # Sort locations by suitability score (highest first)
+    sorted_locations = sorted(locations, key=lambda x: x.get('suitability_score', 0), reverse=True)
     
-    for i, location in enumerate(locations):
-        with st.expander(f"📍 {location.get('area')}, {location.get('city')}, {location.get('state')}"):
-            st.markdown("<div class='card'>", unsafe_allow_html=True)
+    # Display each location card (styled like the mockup)
+    for i, location in enumerate(sorted_locations):
+        location_name = f"{location.get('area')}, {location.get('city')}, {location.get('state')}"
+        trophy = "🥇" if i == 0 else "🥈" if i == 1 else "🥉" if i == 2 else "📍"
+        
+        with st.expander(f"{trophy} {location_name} - Score: {location.get('suitability_score')}/10"):
+            cols = st.columns([7, 5])
             
-            # Metrics row
-            col1, col2, col3 = st.columns(3)
-            with col1:
+            with cols[0]:
+                st.markdown("<div style='font-weight:600; margin-bottom:12px;'>Location Profile</div>", unsafe_allow_html=True)
+                
+                # Profile table like in mockup
                 st.markdown(f"""
-                <div class='metric-container'>
-                    <div class='metric-value'>{location.get('suitability_score')}/10</div>
-                    <div class='metric-label'>Suitability Score</div>
-                </div>
-                """, unsafe_allow_html=True)
-            
-            with col2:
-                st.markdown(f"""
-                <div class='metric-container'>
-                    <div class='metric-value'>{location.get('risk_score')}/10</div>
-                    <div class='metric-label'>Risk Score</div>
-                </div>
+                <table class="profile-table">
+                    <tr>
+                        <td>Population Density:</td>
+                        <td>{location.get('population_density', 'N/A')}</td>
+                    </tr>
+                    <tr>
+                        <td>Cost of Living:</td>
+                        <td>{location.get('cost_of_living', 'N/A')}</td>
+                    </tr>
+                    <tr>
+                        <td>Business Climate:</td>
+                        <td>{location.get('business_climate', 'N/A')}</td>
+                    </tr>
+                    <tr>
+                        <td>Quality of Life:</td>
+                        <td>{location.get('quality_of_life', 'N/A')}</td>
+                    </tr>
+                    <tr>
+                        <td>Infrastructure:</td>
+                        <td>{location.get('infrastructure', 'N/A')}</td>
+                    </tr>
+                </table>
                 """, unsafe_allow_html=True)
                 
-            with col3:
-                st.markdown(f"""
-                <div class='metric-container'>
-                    <div class='metric-value'>{location.get('cost_of_living')}</div>
-                    <div class='metric-label'>Cost of Living</div>
-                </div>
-                """, unsafe_allow_html=True)
-            
-            # Details row
-            col1, col2 = st.columns(2)
-            with col1:
-                st.markdown("#### Area Details")
-                st.markdown(f"**Population Density:** {location.get('population_density')}")
-                st.markdown(f"**Business Climate:** {location.get('business_climate')}")
-                st.markdown(f"**Quality of Life:** {location.get('quality_of_life')}")
-                st.markdown(f"**Infrastructure:** {location.get('infrastructure')}")
-            
-            with col2:
-                st.markdown("#### Key Insights")
-                st.markdown("<div class='success-box'>", unsafe_allow_html=True)
-                st.markdown("##### Advantages")
-                for adv in location.get('advantages', []):
-                    st.markdown(f"<div class='list-item'>✅ {adv}</div>", unsafe_allow_html=True)
-                st.markdown("</div>", unsafe_allow_html=True)
+                # Advantages and challenges
+                adv_col, chal_col = st.columns(2)
                 
-                st.markdown("<div class='warning-box'>", unsafe_allow_html=True)
-                st.markdown("##### Challenges")
-                for chal in location.get('challenges', []):
-                    st.markdown(f"<div class='list-item'>⚠️ {chal}</div>", unsafe_allow_html=True)
-                st.markdown("</div>", unsafe_allow_html=True)
+                with adv_col:
+                    st.markdown("<div style='font-weight:600; margin-bottom:8px;'>Advantages</div>", unsafe_allow_html=True)
+                    for adv in location.get('advantages', []):
+                        st.markdown(f"""
+                        <div class="advantage-item">
+                            <span class="advantage-icon">✓</span>
+                            <span>{adv}</span>
+                        </div>
+                        """, unsafe_allow_html=True)
+                
+                with chal_col:
+                    st.markdown("<div style='font-weight:600; margin-bottom:8px;'>Challenges</div>", unsafe_allow_html=True)
+                    for chal in location.get('challenges', []):
+                        st.markdown(f"""
+                        <div class="challenge-item">
+                            <span class="challenge-icon">⚠️</span>
+                            <span>{chal}</span>
+                        </div>
+                        """, unsafe_allow_html=True)
             
-            st.markdown("</div>", unsafe_allow_html=True)
+            with cols[1]:
+                st.markdown("<div style='font-weight:600; margin-bottom:12px;'>Suitability Analysis</div>", unsafe_allow_html=True)
+                
+                # Create suitability score gauge exactly like mockup
+                fig_suitability = go.Figure(go.Indicator(
+                    mode = "gauge+number",
+                    value = location.get('suitability_score', 0),
+                    domain = {'x': [0, 1], 'y': [0, 1]},
+                    number = {'font': {'size': 44, 'color': '#475569'}},
+                    title = {'text': "Suitability Score", 'font': {'size': 14, 'color': '#64748b'}},
+                    gauge = {
+                        'axis': {'range': [0, 10], 'tickwidth': 1, 'tickfont': {'size': 12}},
+                        'bar': {'color': "#3b82f6", 'thickness': 0.6},
+                        'steps': [
+                            {'range': [0, 2], 'color': "#fef9c3"},
+                            {'range': [2, 4], 'color': "#fef9c3"},
+                            {'range': [4, 6], 'color': "#bfdbfe"},
+                            {'range': [6, 8], 'color': "#bfdbfe"},
+                            {'range': [8, 10], 'color': "#bbf7d0"}
+                        ],
+                        'threshold': {
+                            'line': {'color': "red", 'width': 2},
+                            'thickness': 0.6,
+                            'value': 7
+                        }
+                    }
+                ))
+                
+                fig_suitability.update_layout(height=200, margin=dict(l=30, r=30, t=30, b=20))
+                st.plotly_chart(fig_suitability, use_container_width=True, key=f"suitability_{i}")
+                
+                # Create risk score gauge
+                fig_risk = go.Figure(go.Indicator(
+                    mode = "gauge+number",
+                    value = location.get('risk_score', 0),
+                    domain = {'x': [0, 1], 'y': [0, 1]},
+                    number = {'font': {'size': 44, 'color': '#475569'}},
+                    title = {'text': "Risk Score", 'font': {'size': 14, 'color': '#64748b'}},
+                    gauge = {
+                        'axis': {'range': [0, 10], 'tickwidth': 1, 'tickfont': {'size': 12}},
+                        'bar': {'color': "#ef4444", 'thickness': 0.6},
+                        'steps': [
+                            {'range': [0, 2], 'color': "#bbf7d0"},
+                            {'range': [2, 4], 'color': "#bbf7d0"},
+                            {'range': [4, 6], 'color': "#fef9c3"},
+                            {'range': [6, 8], 'color': "#fef9c3"},
+                            {'range': [8, 10], 'color': "#fee2e2"}
+                        ],
+                        'threshold': {
+                            'line': {'color': "green", 'width': 2},
+                            'thickness': 0.6,
+                            'value': 3
+                        }
+                    }
+                ))
+                
+                fig_risk.update_layout(height=200, margin=dict(l=30, r=30, t=30, b=20))
+                st.plotly_chart(fig_risk, use_container_width=True, key=f"risk_{i}")
 
 def display_competitors(competitors):
-    """Display the market competition results"""
+    """Display the competitors data in a production-grade UI"""
     if not competitors:
+        st.warning("No competitor data available.")
         return
     
-    st.markdown("<div class='subheader'>Market Competition</div>", unsafe_allow_html=True)
+    st.markdown('<div class="section-header">Competitive Landscape</div>', unsafe_allow_html=True)
     
-    # Create columns for a grid layout
+    # Display in a grid layout
     cols = st.columns(2)
     
-    for i, comp in enumerate(competitors):
+    # Sort competitors by some relevant metric
+    sorted_competitors = sorted(
+        competitors, 
+        key=lambda x: (x.get('growth_score', 0) + x.get('customer_satisfaction_score', 0)), 
+        reverse=True
+    )
+    
+    # Display each competitor in a card
+    for i, comp in enumerate(sorted_competitors):
         with cols[i % 2].expander(f"🏢 {comp.get('name')}"):
-            st.markdown("<div class='card'>", unsafe_allow_html=True)
+            st.markdown(f"""
+            <div style="margin-bottom:16px;">
+                <div style="font-weight:600; margin-bottom:8px;">Company Overview</div>
+                <table style="width:100%;">
+                    <tr>
+                        <td style="padding:4px 0; width:40%"><strong>Industry:</strong></td>
+                        <td>{comp.get('industry', 'N/A')}</td>
+                    </tr>
+                    <tr>
+                        <td style="padding:4px 0"><strong>Size:</strong></td>
+                        <td>{comp.get('size', 'N/A')}</td>
+                    </tr>
+                    <tr>
+                        <td style="padding:4px 0"><strong>Address:</strong></td>
+                        <td>{comp.get('address', 'N/A')}</td>
+                    </tr>
+                    <tr>
+                        <td style="padding:4px 0"><strong>Revenue:</strong></td>
+                        <td>{comp.get('revenue', 'N/A')}</td>
+                    </tr>
+                    <tr>
+                        <td style="padding:4px 0"><strong>Market Share:</strong></td>
+                        <td>{comp.get('market_share', 'N/A')}</td>
+                    </tr>
+                </table>
+            </div>
+            """, unsafe_allow_html=True)
             
-            # Basic info
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                st.markdown(f"""
-                <div class='metric-container'>
-                    <div class='metric-value'>{comp.get('rating', 'N/A')}</div>
-                    <div class='metric-label'>Rating</div>
-                </div>
-                """, unsafe_allow_html=True)
-                
-                st.markdown("#### Business Details")
-                st.markdown(f"**Industry:** {comp.get('industry')}")
-                st.markdown(f"**Size:** {comp.get('size')}")
-                st.markdown(f"**Revenue:** {comp.get('revenue')}")
-                st.markdown(f"**Market Share:** {comp.get('market_share')}")
-                
-            with col2:
-                st.markdown(f"""
-                <div class='metric-container' style='margin-bottom: 10px;'>
-                    <div class='metric-value'>{comp.get('growth_score')}/10</div>
-                    <div class='metric-label'>Growth Score</div>
-                </div>
-                """, unsafe_allow_html=True)
-                
-                st.markdown(f"""
-                <div class='metric-container'>
-                    <div class='metric-value'>{comp.get('customer_satisfaction_score')}/10</div>
-                    <div class='metric-label'>Customer Satisfaction</div>
-                </div>
-                """, unsafe_allow_html=True)
-            
-            # Address
-            st.markdown("#### Location")
-            st.markdown(f"📍 {comp.get('address')}")
+            # Key metrics
+            metrics = st.columns(3)
+            with metrics[0]:
+                st.metric("Growth Score", f"{comp.get('growth_score', 'N/A')}/10")
+            with metrics[1]:
+                st.metric("Satisfaction", f"{comp.get('customer_satisfaction_score', 'N/A')}/10")
+            with metrics[2]:
+                st.metric("Rating", f"{comp.get('rating', 'N/A')}")
             
             # USP
-            st.markdown("<div class='info-box'>", unsafe_allow_html=True)
-            st.markdown("#### Unique Selling Proposition")
-            st.markdown(f"{comp.get('unique_selling_proposition')}")
-            st.markdown("</div>", unsafe_allow_html=True)
+            st.markdown(f"""
+            <div class="alert alert-info">
+                <div style="font-weight:600; margin-bottom:4px;">Unique Selling Proposition</div>
+                <p>{comp.get('unique_selling_proposition', 'No information available')}</p>
+            </div>
+            """, unsafe_allow_html=True)
             
             # Reviews
             if comp.get('reviews'):
-                st.markdown("#### Customer Reviews")
-                for rev in comp.get('reviews', []):
-                    st.markdown(f"<div style='background-color:#f9f9f9; padding:10px; border-radius:5px; margin-bottom:8px;'>💬 {rev}</div>", unsafe_allow_html=True)
-            
-            st.markdown("</div>", unsafe_allow_html=True)
+                st.markdown('<div style="font-weight:600; margin-bottom:8px;">Customer Reviews</div>', unsafe_allow_html=True)
+                for review in comp.get('reviews', []):
+                    st.markdown(f"""
+                    <div style="background-color:#f8fafc; padding:10px; border-radius:6px; margin-bottom:8px;">
+                        💬 {review}
+                    </div>
+                    """, unsafe_allow_html=True)
 
 def main():
-    # Custom header
-    st.markdown("<h1 class='main-header'>Venture Scope Dashboard</h1>", unsafe_allow_html=True)
-    
-    # Sidebar styling
-    st.sidebar.markdown("<div class='sidebar-header'>Business Configuration</div>", unsafe_allow_html=True)
-    
-    # Load data
-    cities = load_cities()    
-    industries = load_industries()
-    
-    # Sidebar inputs
-    selected_industry = st.sidebar.selectbox("Select Business Domain", industries)
-    selected_city = st.sidebar.multiselect("Ideal Business Location", sorted(cities))
-    budget_range = st.sidebar.slider("Select Budget Range", 
-                                     10000, 1000000, (100000, 500000), 
-                                     format="$%d")
+    # Page title
+    st.title("Venture Scope Dashboard")
     
     # Initialize session state
     if "products" not in st.session_state:
@@ -295,36 +520,56 @@ def main():
         st.session_state.api_results = None
     if "submitted" not in st.session_state:
         st.session_state.submitted = False
-
-    # Product input section
-    st.sidebar.markdown("<div class='sidebar-header'>Product Configuration</div>", unsafe_allow_html=True)
+    
+    # Sidebar configuration
+    st.sidebar.markdown("<div style='font-weight:600; font-size:18px; margin-bottom:16px;'>Business Configuration</div>", unsafe_allow_html=True)
+    
+    # Load data
+    industries = load_industries()
+    cities = load_cities()
+    
+    # Input form in sidebar
+    selected_industry = st.sidebar.selectbox("Select Business Domain", industries)
+    selected_city = st.sidebar.multiselect("Ideal Business Location", sorted(cities))
+    budget_range = st.sidebar.slider("Select Budget Range", 
+                                   10000, 1000000, (100000, 500000), 
+                                   format="$%d")
+    
+    # Product configuration
+    st.sidebar.markdown("<div style='font-weight:600; font-size:18px; margin-top:24px; margin-bottom:16px;'>Product Configuration</div>", unsafe_allow_html=True)
     
     new_product = st.sidebar.text_input("Add a product:")
-    if st.sidebar.button("Add Product", key="add_product", use_container_width=True):
-        if new_product and new_product not in st.session_state.products:
-            st.session_state.products.append(new_product)
+    col1, col2 = st.sidebar.columns([3, 1])
+    with col1:
+        if st.button("Add Product", key="add_product", use_container_width=True):
+            if new_product and new_product not in st.session_state.products:
+                st.session_state.products.append(new_product)
+                st.rerun()
+    
+    with col2:
+        if st.button("Clear", key="clear_products"):
+            st.session_state.products = []
             st.rerun()
-
-    # Display added products with remove buttons
+    
+    # Display products list
     if st.session_state.products:
-        st.sidebar.markdown("**Your Products:**")
+        st.sidebar.markdown("<div style='font-weight:500; margin-top:12px;'>Your Products:</div>", unsafe_allow_html=True)
         for i, product in enumerate(st.session_state.products):
-            cols = st.sidebar.columns([0.8, 0.2])
+            cols = st.sidebar.columns([4, 1])
             cols[0].markdown(f"- {product}")
-            if cols[1].button("❌", key=f"remove_{product}"):
+            if cols[1].button("❌", key=f"remove_{i}"):
                 st.session_state.products.remove(product)
                 st.rerun()
     
     # Business details
-    st.sidebar.markdown("<div class='sidebar-header'>Business Details</div>", unsafe_allow_html=True)
+    st.sidebar.markdown("<div style='font-weight:600; font-size:18px; margin-top:24px; margin-bottom:16px;'>Business Details</div>", unsafe_allow_html=True)
+    
     size = st.sidebar.selectbox("What is the size of business?", 
-                               ["Startup", "Small Enterprise", "Medium Enterprise", "MNC"])
+                             ["Startup", "Small Enterprise", "Medium Enterprise", "MNC"])
     additional_details = st.sidebar.text_area("What is your Unique Selling Proposition?")
     
-    # Submit button with styling
-    submit_button = st.sidebar.button("Submit Analysis Request", type="primary", use_container_width=True)
-    
-    if submit_button:
+    # Submit button
+    if st.sidebar.button("Generate Business Intelligence", type="primary", use_container_width=True):
         if len(st.session_state.products) > 0 and selected_city:
             st.session_state.submitted = True
             
@@ -333,222 +578,148 @@ def main():
                 "industry": selected_industry,
                 "product": st.session_state.products,
                 "location/city": selected_city,
-                "budget": list(budget_range),
+                "budget": list(budget_range),  # Convert tuple to list for JSON
                 "size": size,
                 "unique_selling_proposition": additional_details
             }
             
-            # Create placeholder for loading message
+            # Show loading state
             placeholder = st.empty()
-            with placeholder.container():
+            with placeholder:
                 st.markdown("""
-                <div class="success-box" style="text-align: center; padding: 20px;">
-                    <h3>Your business proposal is being processed!</h3>
-                    <p>This may take a few moments. Please wait while we analyze your data.</p>
+                <div class="alert alert-info" style="text-align:center;">
+                    <div style="font-size:24px; margin-bottom:12px;">🔍 Analyzing Your Business</div>
+                    <p>We're processing your request. This typically takes 30-60 seconds.</p>
                 </div>
                 """, unsafe_allow_html=True)
             
-            # Define the API calls to make
+            # Call the API
             api_calls = [
                 ("location_intelligence", "location_intelligence", data)
             ]
             
-            # Run the API calls asynchronously
-            with st.spinner("🔍 Processing your business intelligence request..."):
+            with st.spinner():
                 api_results = run_async_calls(api_calls)
                 st.session_state.api_results = api_results
             
+            # Remove loading message
             placeholder.empty()
             
-            # Display main content
+            # Force UI refresh
+            st.rerun()
+            
+        else:
+            if not st.session_state.products:
+                st.sidebar.error("Please add at least one product.")
+            if not selected_city:
+                st.sidebar.error("Please select at least one location.")
+    
+    # Display results if available
+    if st.session_state.submitted and st.session_state.api_results:
+        location_data = st.session_state.api_results.get("location_intelligence", {})
+        
+        if "error" in location_data:
+            st.error(f"Error retrieving data: {location_data['error']}")
+        else:
+            # Display analysis summary
             st.markdown(f"""
-            <div class='info-box'>
-                <h3>Analysis Results for {selected_industry}</h3>
-                <p>Below are the results of your business intelligence analysis for {', '.join(selected_city)}.</p>
-                <p><strong>Budget Range:</strong> ${budget_range[0]:,} to ${budget_range[1]:,}</p>
-                <p><strong>Products:</strong> {', '.join(st.session_state.products)}</p>
+            <div class="alert alert-success">
+                <div style="font-size:18px; font-weight:600; margin-bottom:8px;">Analysis Complete</div>
+                <p>We've analyzed <strong>{selected_industry}</strong> businesses in <strong>{', '.join(selected_city)}</strong> with a budget range of <strong>${budget_range[0]:,} - ${budget_range[1]:,}</strong>.</p>
             </div>
             """, unsafe_allow_html=True)
             
-            # Displaying tabs for different sections
-            market_analysis, trends, location_intelligence, regulations = st.tabs([
+            # Display tabs that match the mockups
+            market_analysis, location_intelligence, market_competition = st.tabs([
                 "📊 Market Analysis", 
-                "📈 Emerging Trends", 
                 "🗺️ Location Intelligence", 
-                "📝 State Regulations"
-            ])    
+                "🏢 Market Competition"
+            ])
             
             with market_analysis:
-                st.markdown("<div class='subheader'>Industry Overview</div>", unsafe_allow_html=True)
+                st.markdown('<div class="section-header">Market Overview</div>', unsafe_allow_html=True)
                 
-                col1, col2 = st.columns(2)
+                # Market metrics
+                col1, col2, col3 = st.columns(3)
                 with col1:
-                    st.markdown("""
-                    <div class='metric-container' style='height:150px;'>
-                        <div style='font-size:18px;'>Market Size</div>
-                        <div class='metric-value' style='font-size:46px; margin-top:10px;'>$4.2T</div>
-                        <div style='color:#4CAF50; margin-top:10px;'>+8.3% YoY Growth</div>
-                    </div>
-                    """, unsafe_allow_html=True)
-                
+                    st.metric("Market Size", "$4.2T", "↑ 8.3%")
                 with col2:
-                    st.markdown("""
-                    <div class='metric-container' style='height:150px;'>
-                        <div style='font-size:18px;'>Growth Rate</div>
-                        <div class='metric-value' style='font-size:46px; margin-top:10px;'>5.8%</div>
-                        <div style='color:#4CAF50; margin-top:10px;'>Outpacing inflation by 2.3%</div>
-                    </div>
-                    """, unsafe_allow_html=True)
+                    st.metric("Annual Growth Rate", "5.8%", "↑ 0.7%")
+                with col3:
+                    st.metric("Market Potential", "High", "")
                 
+                # Market insights
                 st.markdown("""
-                <div class='card' style='margin-top:20px;'>
-                    <h4>Industry Insights</h4>
-                    <p>The healthcare industry includes providers, payers, and life sciences companies. It has shown remarkable resilience in recent years, with steady growth projected through 2030.</p>
-                    <p>Key drivers include an aging population, technological advancements, and increased focus on preventative care.</p>
+                <div class="alert alert-info" style="margin-top:20px;">
+                    <div style="font-weight:600; margin-bottom:8px;">Industry Insights</div>
+                    <p>The selected industry shows strong growth potential with increasing consumer demand for premium quality products. Market conditions favor businesses with a strong unique selling proposition focused on sustainability and local sourcing.</p>
                 </div>
                 """, unsafe_allow_html=True)
-
-            with trends:
-                st.markdown("<div class='subheader'>Emerging Trends</div>", unsafe_allow_html=True)
-                
-                trends_data = [
-                    {
-                        "title": "Digital Transformation",
-                        "description": "Financial institutions are rapidly adopting digital technologies to streamline operations and enhance customer experience.",
-                        "impact": "High",
-                        "icon": "💻"
-                    },
-                    {
-                        "title": "Sustainable Finance",
-                        "description": "Growing emphasis on ESG (Environmental, Social, and Governance) factors in investment decisions.",
-                        "impact": "Medium",
-                        "icon": "🌱"
-                    },
-                    {
-                        "title": "Blockchain Integration",
-                        "description": "Decentralized finance applications are being explored by traditional financial institutions.",
-                        "impact": "Medium-High",
-                        "icon": "🔗"
-                    }
-                ]
-                
-                for trend in trends_data:
-                    st.markdown(f"""
-                    <div class='card'>
-                        <h3>{trend['icon']} {trend['title']}</h3>
-                        <p><strong>Impact: </strong>{trend['impact']}</p>
-                        <p>{trend['description']}</p>
-                    </div>
-                    """, unsafe_allow_html=True)
-                
-                st.info("Financial services are experiencing rapid transformation with fintech adoption and digital banking leading the way.")
-
+            
             with location_intelligence:
-                st.markdown("<div class='subheader'>Location Intelligence</div>", unsafe_allow_html=True)
-                
-                location_data = st.session_state.api_results.get("location_intelligence", {})
-                if "error" in location_data:
-                    st.error(f"Error fetching location intelligence: {location_data['error']}")
-                else:
+                if "locations" in location_data:
                     display_locations(location_data.get("locations", []))
+                else:
+                    st.warning("No location data available.")
+                if "competitors" in location_data:
                     display_competitors(location_data.get("competitors", []))
+                else:
+                    st.warning("No competitor data available.")
             
-            with regulations:
-                st.markdown("<div class='subheader'>State Regulations</div>", unsafe_allow_html=True)
-                
-                st.markdown("""
-                <div class='info-box'>
-                    <h4>Regulatory Overview</h4>
-                    <p>This section provides information about relevant regulations in your selected locations.</p>
-                </div>
-                """, unsafe_allow_html=True)
-                
-                st.info("Note: Detailed regulatory analysis is currently in development. Please check back later for updates.")
-                
-                # Example regulatory info
-                with st.expander("Business Licensing Requirements"):
-                    st.markdown("""
-                    <div class='card'>
-                        <h4>General Business License</h4>
-                        <p>Most businesses operating in New York City require a basic business license from the Department of Consumer Affairs.</p>
-                        <p><strong>Estimated Cost:</strong> $100-$300 depending on business type</p>
-                        <p><strong>Renewal:</strong> Every 2 years</p>
-                    </div>
-                    """, unsafe_allow_html=True)
-                
-                with st.expander("Food Service Regulations"):
-                    st.markdown("""
-                    <div class='card'>
-                        <h4>Food Service Establishment Permit</h4>
-                        <p>Required for businesses serving food and beverages.</p>
-                        <p><strong>Estimated Cost:</strong> $280-$560</p>
-                        <p><strong>Inspection:</strong> Required before opening</p>
-                    </div>
-                    """, unsafe_allow_html=True)
-            
-            # Reset button
+            # Add a button to start a new analysis
             if st.button("Start New Analysis", type="primary"):
                 st.session_state.submitted = False
                 st.session_state.api_results = None
                 st.session_state.products = []
                 st.rerun()
-                
-        else:
-            if not st.session_state.products:
-                st.error("Please add at least one product before submitting.")
-            if not selected_city:
-                st.error("Please select at least one location before submitting.")
     
-    # Show welcome message when not submitted
-    if not st.session_state.submitted:
-        st.html("""
-        <div class='info-box' style='padding: 2rem; text-align: center;'>
-            <h2>Welcome to Venture Scope!</h2>
-            <p style='font-size: 1.2rem; margin: 1rem 0;'>This tool helps you analyze potential business locations based on market intelligence data.</p>
-            
-            <div style='background-color: #f9f9f9; padding: 1.5rem; border-radius: 5px; margin: 1.5rem 0; text-align: left;'>
-                <h3 style='margin-bottom: 1rem;'>How to use:</h3>
-                <ol style='margin-left: 1.5rem;'>
-                    <li>Select your business domain and target locations</li>
-                    <li>Add your products or services</li>
-                    <li>Set your budget range</li>
-                    <li>Select your business size</li>
-                    <li>Enter your unique selling proposition</li>
-                    <li>Click Submit to start the analysis</li>
-                </ol>
-            </div>
-            
-            <p>The system will analyze market conditions, competition, and location suitability to provide recommendations for your business venture.</p>
+    # Show welcome screen when not submitted
+    elif not st.session_state.submitted:
+        st.markdown("""
+        <div class="alert alert-info" style="text-align:center; padding:30px;">
+            <div style="font-size:24px; font-weight:600; margin-bottom:16px;">Welcome to Venture Scope</div>
+            <p style="font-size:16px; margin-bottom:24px;">Make data-driven location decisions for your business with our advanced analytics platform.</p>
         </div>
-        """)
+        """, unsafe_allow_html=True)
         
-        # Demo images or examples
-        st.markdown("<h3 style='margin-top: 2rem;'>Features</h3>", unsafe_allow_html=True)
-        col1, col2, col3 = st.columns(3)
+        # Feature showcase
+        st.markdown('<div class="section-header">How It Works</div>', unsafe_allow_html=True)
         
-        with col1:
+        cols = st.columns(3)
+        with cols[0]:
             st.markdown("""
-            <div class='card' style='height: 200px; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center;'>
-                <h3>🏙️ Location Analysis</h3>
-                <p>Find the perfect location for your business based on multiple factors</p>
+            <div style="text-align:center; padding:20px; background-color:#f8fafc; border-radius:8px; height:100%;">
+                <div style="font-size:36px; margin-bottom:12px;">📊</div>
+                <div style="font-weight:600; margin-bottom:8px;">Market Analysis</div>
+                <p style="color:#64748b;">Gain insights into market trends, consumer behavior, and growth opportunities.</p>
             </div>
             """, unsafe_allow_html=True)
             
-        with col2:
+        with cols[1]:
             st.markdown("""
-            <div class='card' style='height: 200px; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center;'>
-                <h3>🏢 Competitor Analysis</h3>
-                <p>Understand your competition's strengths and weaknesses</p>
+            <div style="text-align:center; padding:20px; background-color:#f8fafc; border-radius:8px; height:100%;">
+                <div style="font-size:36px; margin-bottom:12px;">🗺️</div>
+                <div style="font-weight:600; margin-bottom:8px;">Location Intelligence</div>
+                <p style="color:#64748b;">Find the perfect location based on multiple factors including demographics and competition.</p>
             </div>
             """, unsafe_allow_html=True)
             
-        with col3:
+        with cols[2]:
             st.markdown("""
-            <div class='card' style='height: 200px; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center;'>
-                <h3>📊 Market Insights</h3>
-                <p>Get valuable insights into market trends and opportunities</p>
+            <div style="text-align:center; padding:20px; background-color:#f8fafc; border-radius:8px; height:100%;">
+                <div style="font-size:36px; margin-bottom:12px;">🏢</div>
+                <div style="font-weight:600; margin-bottom:8px;">Competitor Analysis</div>
+                <p style="color:#64748b;">Understand your competition's strengths and weaknesses to develop effective strategies.</p>
             </div>
             """, unsafe_allow_html=True)
+    
+    # Page footer
+    st.markdown("""
+    <div class="footer">
+        <p>Venture Scope | Business Location Intelligence Platform</p>
+        <p>© 2025 All Rights Reserved</p>
+    </div>
+    """, unsafe_allow_html=True)
 
 if __name__ == "__main__":
     main()
