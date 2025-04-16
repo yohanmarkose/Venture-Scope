@@ -11,6 +11,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 app = FastAPI()
+API_URL = "http://localhost:8000/"
 
 # Models
 class BusinessQuery(BaseModel):
@@ -138,70 +139,84 @@ async def location_intelligence(query: BusinessQuery):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error processing location intelligence: {str(e)}")
 
-import openai
-import traceback
-from pinecone import Pinecone
-from fastapi import HTTPException
-from services.vectordb_expertchat import query_pinecone
+from fastapi import HTTPException, APIRouter
 from pydantic import BaseModel
+import os
+from langchain.agents import Tool, initialize_agent
+from langchain.chat_models import ChatOpenAI
+from services.vectordb_expertchat import query_pinecone
+from tavily import TavilyClient
 
+router = APIRouter()
+
+# ------------------ Models ------------------ #
 class ExpertChatRequest(BaseModel):
     expert_key: str
     namespace: str
     question: str
+    base_info: str
     model: str = "gpt-4o-mini"
 
-@app.post("/chat_with_expert")
+# ------------------ Init Clients ------------------ #
+llm = ChatOpenAI(model="gpt-3.5-turbo", temperature=0)
+tavily = TavilyClient(api_key=os.getenv("TAVILY_API_KEY"))
+
+# ------------------ Tool Functions ------------------ #
+def make_pinecone_tool(namespace):
+    def tool_func(query: str):
+        matches = query_pinecone(query, namespace=namespace, top_k=5)
+        return "\n\n".join([m["metadata"]["text"] for m in matches if "text" in m.get("metadata", {})])
+    return tool_func
+
+def web_search_tool(query: str):
+    result = tavily.search(query=query)
+    if isinstance(result, dict) and "results" in result:
+        return result["results"][0]["content"] if result["results"] else "No recent data found."
+    elif isinstance(result, list):
+        return result[0]["content"] if result else "No recent data found."
+    return "⚠️ Unexpected web search result format."
+
+# ------------------ Endpoint ------------------ #
+@router.post("/chat_with_expert")
 def chat_with_expert(request: ExpertChatRequest):
     try:
-        print(f"[INFO] Incoming Chat Request:\n - Expert: {request.expert_key}\n - Namespace: {request.namespace}\n - Question: {request.question}")
+        expert_name = request.expert_key.replace("_", " ").title()
+        base_info = request.base_info or f"You are {expert_name}, an industry expert."
+        persona_style = "insightful"
 
-        # Fetch relevant context from Pinecone
-        matches = query_pinecone(request.question, namespace=request.namespace, top_k=7)
-        print(f"[INFO] Matches retrieved: {len(matches)}")
-
-        if not matches:
-            return {
-                "answer": f"📄 I couldn't find any relevant information from {request.expert_key.title()}'s material to answer your question. Try asking something more related to their expertise."
-            }
-
-        # Extract and structure context
-        context_chunks = [m["metadata"]["text"] for m in matches if "text" in m.get("metadata", {})]
-        context = "\n\n".join(context_chunks)
-
-        # Expert role prompt
-        expert_name = request.expert_key.replace('_', ' ').title()
-        system_prompt = f"""
-            You are {expert_name}, a renowned expert in your field. You are known for your authentic voice and sharp, insightful communication.
-
-            Your task is to respond ONLY using insights, philosophies, and ideas that can be found in the material provided below.
-
-            If the user’s question cannot be answered based on this material, kindly reply with:  
-            “I’m sorry, but I can only respond based on the documented insights and material provided.”
-
-            --- Begin Reference Material ---
-            {context}
-            --- End Reference Material ---
-
-            Always respond in the tone and style of {expert_name}, making it feel like they are personally responding.
-            """.strip()
-         
-        messages = [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": request.question}
+        tools = [
+            Tool(name="book_knowledge", func=make_pinecone_tool(request.namespace),
+                 description="Use for questions based on the expert's published work."),
+            Tool(name="web_search", func=web_search_tool,
+                 description="Use for recent opinions, news, or trending topics.")
         ]
 
-        print(f"[INFO] Sending request to OpenAI with {len(messages)} messages...")
-        response = openai.chat.completions.create(
-            model=request.model,
-            messages=messages
-        )
-        print("[INFO] Received response from OpenAI.")
+        agent = initialize_agent(tools=tools, llm=llm, agent="zero-shot-react-description", verbose=True ,handle_parsing_errors=True)
 
-        answer = response.choices[0].message.content.strip()
-        return {"answer": answer}
+        final_prompt = f"""
+        You are {expert_name}. {base_info}
+        You have access to two sources of information:
+        - book_knowledge: your published writings, talks, and expert-authored material
+        - web_search: current opinions or updates related to your work
+
+        Guidelines:
+        - Use either book_knowledge or web_search once — choose based on the complexity of the question.
+        - If the question is simple or based on personal experience, answer it directly.
+        - Respond in a direct, candid, and experienced tone — like a battle-tested founder talking to a younger entrepreneur.
+        - Use anecdotes, leadership lessons, or real-world startup examples where helpful.
+        - If the question is off-topic or irrelevant, respond with: "Sorry, I can’t help with that."
+        - For casual greetings or personal messages, respond in a HUMAN way without using any tools.
+
+        Question: {request.question}
+        """
+
+        result = agent.run(final_prompt)
+        return {"answer": result}
 
     except Exception as e:
-        print("[ERROR] Exception occurred during expert chat:")
+        import traceback
         traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Chat failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Agent error: {str(e)}")
+
+# ------------------ Register Router ------------------ #
+app.include_router(router)
