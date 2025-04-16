@@ -14,11 +14,16 @@ from dotenv import load_dotenv
 import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
+from langchain_core.messages import HumanMessage, AIMessage
+import uuid
+from features.qa_agent import create_qa_chatbot, handle_user_message_with_history
+
 load_dotenv()
 
 app = FastAPI()
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+
 
 INDUSTRIES = [
     "accounting",
@@ -85,7 +90,7 @@ state_abbrev = {
     'South Dakota': 'SD', 'Tennessee': 'TN', 'Texas': 'TX', 'Utah': 'UT', 'Vermont': 'VT',
     'Virginia': 'VA', 'Washington': 'WA', 'West Virginia': 'WV', 'Wisconsin': 'WI', 'Wyoming': 'WY'
 }
- 
+
 # Models
 class BusinessQuery(BaseModel):
     industry: str = Field(..., description="The industry sector of the business")
@@ -107,6 +112,25 @@ class BusinessQuery(BaseModel):
                 "unique_selling_proposition": "High Quality, Organic, Locally Sourced Ingredients"
             }
         }
+    }
+
+class MessageItem(BaseModel):
+    type: str  # "human" or "ai"
+    content: str
+    
+class QuestionRequest(BaseModel):
+    question: str
+    industry: str
+    product: List[str]
+    location_city: List[str] = Field(..., alias="location/city")
+    budget: List[float]
+    size: str
+    unique_selling_proposition: Optional[str] = None
+    session_id: Optional[str] = None
+    message_history: Optional[List[MessageItem]] = None
+    
+    model_config = {
+        "populate_by_name": True
     }
 
 class Competitor(BaseModel):
@@ -411,4 +435,71 @@ async def location_intelligence(query: BusinessQuery):
     
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error processing location intelligence: {str(e)}")
+    
+
+active_chatbots = {}
+@app.post("/q_and_a")
+def question_and_analysis(query: QuestionRequest):
+    try:
+        print(f"Received question: {query.question}")
+        print(f"Session ID: {query.session_id}")
+        
+        # Process message history if provided
+        message_history = []
+        if query.message_history:
+            print(f"Message history provided with {len(query.message_history)} items")
+            for msg in query.message_history:
+                if msg.type == "human":
+                    message_history.append(HumanMessage(content=msg.content))
+                elif msg.type == "ai":
+                    message_history.append(AIMessage(content=msg.content))
+        
+        # If no history or only has AI messages, add the current question
+        if not message_history or all(isinstance(msg, AIMessage) for msg in message_history):
+            message_history.append(HumanMessage(content=query.question))
+            
+        # Prepare report data
+        report_data = {
+            "market_analysis": f"{query.industry}, {query.size}",
+            "emerging_trends": query.industry,
+            "location_intelligence": query.location_city,
+            "recommendations": f"{query.industry}, {query.size}, {query.budget}"
+        }
+        print("Report data:", report_data)
+        
+        # Create or get existing chatbot session
+        session_id = query.session_id or str(uuid.uuid4())
+        print("Session ID:", session_id)
+        
+        if session_id not in active_chatbots:
+            # Create new chatbot instance with the specific session ID
+            print("Creating new chatbot instance")
+            chatbot = create_qa_chatbot(report_data)
+            print("Chatbot instance created")
+            chatbot = chatbot.with_config(
+                {"thread": {"configurable": {"session_id": session_id}}}
+            )
+            print("Chatbot instance configured")
+            active_chatbots[session_id] = (chatbot, report_data)
+            print("Chatbot instance stored")
+        else:
+            # Get existing chatbot
+            chatbot, stored_report_data = active_chatbots[session_id]
+            # Update report data if needed
+            report_data = {**stored_report_data, **report_data}
+            active_chatbots[session_id] = (chatbot, report_data)
+        
+        # Process the user's question with message history
+        response = handle_user_message_with_history(chatbot, message_history, report_data)
+        print("Response from chatbot:", response)
+        
+        return {
+            "answer": response,
+            "session_id": session_id
+        }
+    except Exception as e:
+        import traceback
+        print(f"Error in question_and_analysis: {str(e)}")
+        print(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"Error answering question: {str(e)}")
     
