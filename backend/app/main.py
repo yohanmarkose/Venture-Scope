@@ -143,7 +143,7 @@ from fastapi import HTTPException, APIRouter
 from pydantic import BaseModel
 import os
 from langchain.agents import Tool, initialize_agent
-from langchain.chat_models import ChatOpenAI
+from langchain_community.chat_models import ChatOpenAI
 from services.vectordb_expertchat import query_pinecone
 from tavily import TavilyClient
 
@@ -158,7 +158,7 @@ class ExpertChatRequest(BaseModel):
     model: str = "gpt-4o-mini"
 
 # ------------------ Init Clients ------------------ #
-llm = ChatOpenAI(model="gpt-3.5-turbo", temperature=0)
+llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
 tavily = TavilyClient(api_key=os.getenv("TAVILY_API_KEY"))
 
 # ------------------ Tool Functions ------------------ #
@@ -168,12 +168,24 @@ def make_pinecone_tool(namespace):
         return "\n\n".join([m["metadata"]["text"] for m in matches if "text" in m.get("metadata", {})])
     return tool_func
 
-def web_search_tool(query: str):
+def make_web_search_tool_for_expert(expert_key: str):
+    if expert_key == "benhorowitz":
+        return lambda query: strict_domain_web_search(query, domain="a16z.com")
+    else:
+        return None  
+
+def strict_domain_web_search(query: str, domain: str):
     result = tavily.search(query=query)
+    
+    def is_preferred(res):
+        return domain in res.get("url", "")
+
     if isinstance(result, dict) and "results" in result:
-        return result["results"][0]["content"] if result["results"] else "No recent data found."
-    elif isinstance(result, list):
-        return result[0]["content"] if result else "No recent data found."
+        filtered = list(filter(is_preferred, result["results"]))
+        if filtered:
+            return filtered[0]["content"]
+        else:
+            return f"No relevant results found from {domain}."
     return "⚠️ Unexpected web search result format."
 
 # ------------------ Endpoint ------------------ #
@@ -182,36 +194,42 @@ def chat_with_expert(request: ExpertChatRequest):
     try:
         expert_name = request.expert_key.replace("_", " ").title()
         base_info = request.base_info or f"You are {expert_name}, an industry expert."
-        persona_style = "insightful"
 
         tools = [
             Tool(name="book_knowledge", func=make_pinecone_tool(request.namespace),
                  description="Use for questions based on the expert's published work."),
-            Tool(name="web_search", func=web_search_tool,
-                 description="Use for recent opinions, news, or trending topics.")
+            Tool(name="web_search", func=make_web_search_tool_for_expert(request.expert_key),
+                 description="Use for questions requiring real-time information or latest blogs from 2025")
         ]
 
-        agent = initialize_agent(tools=tools, llm=llm, agent="zero-shot-react-description", verbose=True ,handle_parsing_errors=True)
+        agent = initialize_agent(tools=tools, llm=llm, agent="chat-conversational-react-description", verbose=True ,handle_parsing_errors=True)
 
         final_prompt = f"""
         You are {expert_name}. {base_info}
         You have access to two sources of information:
         - book_knowledge: your published writings, talks, and expert-authored material
-        - web_search: current opinions or updates related to your work
+        - web_search: Your real time or latest blogs and articles
 
         Guidelines:
-        - Use either book_knowledge or web_search once — choose based on the complexity of the question.
+        - Use either book_knowledge or web_search not more than once — choose based on the complexity of the question.
+        - All the responses generated should be in the first person
         - If the question is simple or based on personal experience, answer it directly.
-        - Respond in a direct, candid, and experienced tone — like a battle-tested founder talking to a younger entrepreneur.
-        - Use anecdotes, leadership lessons, or real-world startup examples where helpful.
+        - Speak in a candid, wise, and occasionally humorous tone. Use examples, stories, and leadership lessons.
         - If the question is off-topic or irrelevant, respond with: "Sorry, I can’t help with that."
-        - For casual greetings or personal messages, respond in a HUMAN way without using any tools.
 
         Question: {request.question}
         """
 
-        result = agent.run(final_prompt)
-        return {"answer": result}
+        response = agent.invoke({
+            "input": final_prompt,
+            "chat_history": []  # optionally populate from request.chat_history
+        })
+
+        return {
+            "answer": response["output"],
+            "trace": response.get("intermediate_steps", [])
+        }
+
 
     except Exception as e:
         import traceback
