@@ -673,8 +673,10 @@ def main():
             
             with market_analysis:
                 st.markdown('<div class="section-header">Market Overview</div>', unsafe_allow_html=True)
-                
-                st.markdown(market_data.get("answer", "No market data available."))
+                fig = go.Figure(json.loads(market_data.get("plot")))
+                st.header(market_data.get("industry"))
+                st.plotly_chart(fig)
+                st.markdown(market_data.get("answer"))
             
             with location_intelligence:
                 if "locations" in location_data:

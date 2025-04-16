@@ -217,9 +217,110 @@ def convert_report_to_markdown(report_dict):
 
 ## Sources
 {sources}
-"""
-    
+""" 
     return markdown_report
+
+def get_graph(industry):
+    print("Starting")
+    snow_obj = SnowflakeConnector(industry)
+    print("Connecting to Snowflake...")
+    snow_obj.connect()
+    print("Connected to Snowflake!")
+    df = snow_obj.get_statewise_count_by_industry(industry)
+    print("Data fetched from Snowflake!")
+    snow_obj.disconnect()
+    df['REGION'] = df['REGION'].str.title()
+    for region in df['REGION'].unique():
+        if region not in state_abbrev:
+            print(f"Warning: '{region}' is not a recognized US state name")
+
+    df['state_code'] = df['REGION'].map(state_abbrev)
+
+    state_totals = df.groupby('REGION')['COUNT'].sum().reset_index()
+    state_totals['state_code'] = state_totals['REGION'].map(state_abbrev)
+
+    size_order = ['1-10', '11-50', '51-200', '201-500', '501-1000', '1001-5000', '5001-10000', '10000+']
+    df['SIZE_CATEGORY'] = pd.Categorical(df['SIZE_CATEGORY'], categories=size_order, ordered=True)
+
+    size_pivot = df.pivot_table(
+        values='COUNT', 
+        index='REGION', 
+        columns='SIZE_CATEGORY',
+        aggfunc='sum',
+        fill_value=0
+    )
+    size_pivot_normalized = size_pivot.div(size_pivot.sum(axis=1), axis=0) * 100
+    size_pivot_normalized['state_code'] = size_pivot_normalized.index.map(state_abbrev)
+    fig = make_subplots(
+        rows=1, cols=1,
+        specs=[[{"type": "choropleth"}]]
+    )
+    
+    fig.add_trace(
+        go.Choropleth(
+            locations=state_totals['state_code'],
+            z=state_totals['COUNT'],
+            locationmode='USA-states',
+            colorscale='Viridis',
+            colorbar_title="Total Companies",
+            name=f"Total {industry.title()} Companies",
+            marker_line_color='white',
+            marker_line_width=0.5,
+            hovertemplate='<b>%{location}</b><br>' +
+                            'Total Companies: %{z}<br>' +
+                            '<extra></extra>'
+        ),
+        row=1, col=1
+    )
+
+    size_data = []
+    for state in state_totals['REGION']:
+        if state in size_pivot.index:
+            for size_cat in size_order:
+                if size_cat in size_pivot.columns:
+                    value = size_pivot.loc[state, size_cat] if size_cat in size_pivot.columns else 0
+                    pct = size_pivot_normalized.loc[state, size_cat] if size_cat in size_pivot_normalized.columns else 0
+                    
+                    # Add hover data
+                    fig.add_trace(
+                        go.Scatter(
+                            x=[state_abbrev.get(state, "")],
+                            y=[0],
+                            mode='markers',
+                            marker=dict(size=0, color='rgba(0,0,0,0)'),
+                            hoverinfo='text',
+                            hovertemplate=f'<b>{state}</b><br>' +
+                                         f'Size: {size_cat}<br>' +
+                                         f'Count: {value}<br>' +
+                                         f'Percentage: {pct:.1f}%<br>' +
+                                         '<extra></extra>',
+                            showlegend=False
+                        )
+                    )
+    fig.update_layout(
+        title_text=f'US {industry.title()} Industry Distribution by State',
+        title_x=0.5,
+        geo=dict(
+            scope='usa',
+            projection=go.layout.geo.Projection(type='albers usa'),
+            showlakes=True,
+            lakecolor='rgb(255, 255, 255)'
+        ),
+        height=600,
+        width=950,
+        margin=dict(l=0, r=0, t=50, b=0),
+        showlegend=False
+    )
+    fig.add_annotation(
+        x=0.5,
+        y=-0.1,
+        xref='paper',
+        yref='paper',
+        text='Hover over states to see size category distribution',
+        showarrow=False,
+        font=dict(size=12)
+    )
+    return fig
 
 # Endpoint to analyze market based on business query
 @app.post("/market_analysis")
@@ -233,31 +334,36 @@ def market_analysis(query: BusinessQuery):
             "size": query.size,
             "unique_selling_proposition": query.unique_selling_proposition or ""
         }
+        # size_category = formatted_query["size"]
+        size_category = None
         
         # Get industry from the domain and products
         industry = classify_industry(formatted_query["industry"], formatted_query["product"])
-        size_category = formatted_query["size"]
-        
-        runnable = run_agents(industry or formatted_query["industry"], size_category)
+        print("Industry selected is:", industry)
+
+        print("\n\n got till before plot\n\n")
+        fig_obj = get_graph(industry)
+        print("\n\n got till after plot\n\n")
+        runnable = run_agents(industry, size_category)
         out = runnable.invoke({ 
             "chat_history": [],
             "industry": industry,
             "size_category": size_category
         })
-
-
         print(out)
         answer = out["intermediate_steps"][-1].tool_input
-
         markdown_report = convert_report_to_markdown(answer)
 
         print("Answer:\n", markdown_report)
         
         return {
-            "answer": markdown_report
+            "answer": markdown_report,
+            "plot": fig_obj.to_json(),
+            "industry": industry
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error answering question: {str(e)}")
+
 
 # Endpoint to analyze location intelligence based on business query
 @app.post("/location_intelligence", response_model=LocationIntelligenceResponse)
