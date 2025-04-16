@@ -4,15 +4,89 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 from typing import List, Dict, Any, Optional, Tuple, Union
 from features.mcp.google_maps.location_intelligence import start_location_intelligence
+from features.market_analysis import run_agents
+from features.snowflake_analysis import SnowflakeConnector
 import asyncio
 import aiohttp
 from concurrent.futures import ThreadPoolExecutor
+import openai
 from dotenv import load_dotenv
+import pandas as pd
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 load_dotenv()
 
 app = FastAPI()
 API_URL = "http://localhost:8000/"
 
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+
+INDUSTRIES = [
+    "accounting",
+    "airlines/aviation",
+    "alternative dispute resolution",
+    "alternative medicine",
+    "animation",
+    "apparel & fashion",
+    "architecture & planning",
+    "arts and crafts",
+    "automotive",
+    "aviation & aerospace",
+    "banking",
+    "biotechnology",
+    "broadcast media",
+    "building materials",
+    "business supplies and equipment",
+    "capital markets",
+    "chemicals",
+    "civic & social organization",
+    "civil engineering",
+    "commercial real estate",
+    "computer & network security",
+    "computer games",
+    "computer hardware",
+    "computer networking",
+    "computer software",
+    "construction",
+    "consumer electronics",
+    "consumer goods",
+    "consumer services",
+    "cosmetics",
+    "dairy",
+    "defense & space",
+    "design",
+    "e-learning",
+    "education management",
+    "electrical/electronic manufacturing",
+    "entertainment",
+    "environmental services",
+    "events services",
+    "executive office",
+    "facilities services",
+    "farming",
+    "financial services",
+    "fine art",
+    "fishery",
+    "food & beverages",
+    "food production",
+    "fund-raising",
+    "furniture",
+    "gambling & casinos"
+]
+
+state_abbrev = {
+    'Alabama': 'AL', 'Alaska': 'AK', 'Arizona': 'AZ', 'Arkansas': 'AR', 'California': 'CA',
+    'Colorado': 'CO', 'Connecticut': 'CT', 'Delaware': 'DE', 'Florida': 'FL', 'Georgia': 'GA',
+    'Hawaii': 'HI', 'Idaho': 'ID', 'Illinois': 'IL', 'Indiana': 'IN', 'Iowa': 'IA',
+    'Kansas': 'KS', 'Kentucky': 'KY', 'Louisiana': 'LA', 'Maine': 'ME', 'Maryland': 'MD',
+    'Massachusetts': 'MA', 'Michigan': 'MI', 'Minnesota': 'MN', 'Mississippi': 'MS', 'Missouri': 'MO',
+    'Montana': 'MT', 'Nebraska': 'NE', 'Nevada': 'NV', 'New Hampshire': 'NH', 'New Jersey': 'NJ',
+    'New Mexico': 'NM', 'New York': 'NY', 'North Carolina': 'NC', 'North Dakota': 'ND', 'Ohio': 'OH',
+    'Oklahoma': 'OK', 'Oregon': 'OR', 'Pennsylvania': 'PA', 'Rhode Island': 'RI', 'South Carolina': 'SC',
+    'South Dakota': 'SD', 'Tennessee': 'TN', 'Texas': 'TX', 'Utah': 'UT', 'Vermont': 'VT',
+    'Virginia': 'VA', 'Washington': 'WA', 'West Virginia': 'WV', 'Wisconsin': 'WI', 'Wyoming': 'WY'
+}
+ 
 # Models
 class BusinessQuery(BaseModel):
     industry: str = Field(..., description="The industry sector of the business")
@@ -66,40 +140,6 @@ class Location(BaseModel):
 class LocationIntelligenceResponse(BaseModel):
     locations: List[Location]
     competitors: List[Competitor]
-    
-async def async_send_to_api(session, api, data):
-    """Send data to the API asynchronously and return the response"""
-    try:
-        async with session.post(f"{API_URL}/{api}", json=data, timeout=180) as response:
-            response.raise_for_status()
-            return await response.json()
-    except Exception as e:
-        return {"error": str(e)}
-    
-def run_async_calls(api_calls):
-    """Run multiple API calls asynchronously"""
-    results = {}
-    
-    async def fetch_all():
-        async with aiohttp.ClientSession() as session:
-            tasks = []
-            for api_name, api_endpoint, api_data in api_calls:
-                task = asyncio.create_task(async_send_to_api(session, api_endpoint, api_data))
-                tasks.append((api_name, task))
-            
-            # Wait for all tasks to complete
-            for api_name, task in tasks:
-                try:
-                    results[api_name] = await task
-                except Exception as e:
-                    results[api_name] = {"error": str(e)}
-    
-    # Run the async event loop in a separate thread
-    with ThreadPoolExecutor() as executor:
-        future = executor.submit(asyncio.run, fetch_all())
-        future.result()  # Wait for completion
-        
-    return results
 
 # API Endpoints    
 
@@ -113,13 +153,247 @@ def read_root():
 def health_check():
     return {"status": "ok"}
 
+# Endpoint to classify industry based on user input
+def classify_industry(domain: str, products: list) -> str:
+    client = openai.OpenAI(api_key=OPENAI_API_KEY)
+
+    prompt = f"""
+A company operates in the domain of: {domain}.
+They offer products or services such as: {', '.join(products)}.
+
+From the following list of industries, pick the **one best matching industry**:
+{', '.join(INDUSTRIES)}
+
+Return ONLY one industry name from the list.
+"""
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": "You classify companies into standard industries."},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0
+        )
+
+        industry = response.choices[0].message.content.strip().lower()
+        if industry in INDUSTRIES:
+            return industry
+        else:
+            raise ValueError(f"Model returned an unrecognized industry: {industry}")
+    except Exception as e:
+        print(f"Error classifying industry: {e}")
+        return None
+
+# Function to convert report dictionary to markdown format
+def convert_report_to_markdown(report_dict):
+    """
+    Converts a market analysis report dictionary to markdown format.
+    
+    Args:
+        report_dict: Dictionary containing report sections
+        
+    Returns:
+        String with markdown-formatted report
+    """
+    # Handle case where input might already be a string
+    if isinstance(report_dict, str):
+        try:
+            # Try to parse it as JSON
+            import json
+            report_dict = json.loads(report_dict)
+        except:
+            # If not valid JSON, return as is
+            return report_dict
+    
+    # Extract sections from dictionary with fallbacks for missing sections
+    research_steps = report_dict.get("research_steps", "Research methodology not provided")
+    market_giants = report_dict.get("market_giants", "Market giants data not available")
+    competitor_details = report_dict.get("competitor_details", "Competitor details not available")
+    industry_overview = report_dict.get("industry_overview", "Industry overview not available")
+    industry_trends = report_dict.get("industry_trends", "Industry trends not available")
+    sources = report_dict.get("sources", "Sources not provided")
+    
+    # Format the markdown report
+    markdown_report = f"""
+# Market Analysis Report
+
+## Research Methodology
+{research_steps}
+
+## Market Giants
+{market_giants}
+
+## Competitor Details
+{competitor_details}
+
+## Industry Overview
+{industry_overview}
+
+## Industry Trends
+{industry_trends}
+
+## Sources
+{sources}
+""" 
+    return markdown_report
+
+def get_graph(industry):
+    print("Starting")
+    snow_obj = SnowflakeConnector(industry)
+    print("Connecting to Snowflake...")
+    snow_obj.connect()
+    print("Connected to Snowflake!")
+    df = snow_obj.get_statewise_count_by_industry(industry)
+    print("Data fetched from Snowflake!")
+    snow_obj.disconnect()
+    df['REGION'] = df['REGION'].str.title()
+    for region in df['REGION'].unique():
+        if region not in state_abbrev:
+            print(f"Warning: '{region}' is not a recognized US state name")
+
+    df['state_code'] = df['REGION'].map(state_abbrev)
+
+    state_totals = df.groupby('REGION')['COUNT'].sum().reset_index()
+    state_totals['state_code'] = state_totals['REGION'].map(state_abbrev)
+
+    size_order = ['1-10', '11-50', '51-200', '201-500', '501-1000', '1001-5000', '5001-10000', '10000+']
+    df['SIZE_CATEGORY'] = pd.Categorical(df['SIZE_CATEGORY'], categories=size_order, ordered=True)
+
+    size_pivot = df.pivot_table(
+        values='COUNT', 
+        index='REGION', 
+        columns='SIZE_CATEGORY',
+        aggfunc='sum',
+        fill_value=0
+    )
+    size_pivot_normalized = size_pivot.div(size_pivot.sum(axis=1), axis=0) * 100
+    size_pivot_normalized['state_code'] = size_pivot_normalized.index.map(state_abbrev)
+    fig = make_subplots(
+        rows=1, cols=1,
+        specs=[[{"type": "choropleth"}]]
+    )
+    
+    fig.add_trace(
+        go.Choropleth(
+            locations=state_totals['state_code'],
+            z=state_totals['COUNT'],
+            locationmode='USA-states',
+            colorscale='Viridis',
+            colorbar_title="Total Companies",
+            name=f"Total {industry.title()} Companies",
+            marker_line_color='white',
+            marker_line_width=0.5,
+            hovertemplate='<b>%{location}</b><br>' +
+                            'Total Companies: %{z}<br>' +
+                            '<extra></extra>'
+        ),
+        row=1, col=1
+    )
+
+    size_data = []
+    for state in state_totals['REGION']:
+        if state in size_pivot.index:
+            for size_cat in size_order:
+                if size_cat in size_pivot.columns:
+                    value = size_pivot.loc[state, size_cat] if size_cat in size_pivot.columns else 0
+                    pct = size_pivot_normalized.loc[state, size_cat] if size_cat in size_pivot_normalized.columns else 0
+                    
+                    # Add hover data
+                    fig.add_trace(
+                        go.Scatter(
+                            x=[state_abbrev.get(state, "")],
+                            y=[0],
+                            mode='markers',
+                            marker=dict(size=0, color='rgba(0,0,0,0)'),
+                            hoverinfo='text',
+                            hovertemplate=f'<b>{state}</b><br>' +
+                                         f'Size: {size_cat}<br>' +
+                                         f'Count: {value}<br>' +
+                                         f'Percentage: {pct:.1f}%<br>' +
+                                         '<extra></extra>',
+                            showlegend=False
+                        )
+                    )
+    fig.update_layout(
+        title_text=f'US {industry.title()} Industry Distribution by State',
+        title_x=0.5,
+        geo=dict(
+            scope='usa',
+            projection=go.layout.geo.Projection(type='albers usa'),
+            showlakes=True,
+            lakecolor='rgb(255, 255, 255)'
+        ),
+        height=600,
+        width=950,
+        margin=dict(l=0, r=0, t=50, b=0),
+        showlegend=False
+    )
+    fig.add_annotation(
+        x=0.5,
+        y=-0.1,
+        xref='paper',
+        yref='paper',
+        text='Hover over states to see size category distribution',
+        showarrow=False,
+        font=dict(size=12)
+    )
+    return fig
+
+# Endpoint to analyze market based on business query
+@app.post("/market_analysis")
+def market_analysis(query: BusinessQuery):
+    try:
+        formatted_query = {
+            "industry": query.industry,
+            "product": ", ".join(query.product),
+            "location/city": ", ".join(query.location_city),
+            "budget": f"{query.budget[0]} - {query.budget[1]}",
+            "size": query.size,
+            "unique_selling_proposition": query.unique_selling_proposition or ""
+        }
+        # size_category = formatted_query["size"]
+        size_category = None
+        
+        # Get industry from the domain and products
+        industry = classify_industry(formatted_query["industry"], formatted_query["product"])
+        print("Industry selected is:", industry)
+
+        print("\n\n got till before plot\n\n")
+        fig_obj = get_graph(industry)
+        print("\n\n got till after plot\n\n")
+        runnable = run_agents(industry, size_category)
+        out = runnable.invoke({ 
+            "chat_history": [],
+            "industry": industry,
+            "size_category": size_category
+        })
+        print(out)
+        answer = out["intermediate_steps"][-1].tool_input
+        markdown_report = convert_report_to_markdown(answer)
+
+        print("Answer:\n", markdown_report)
+        
+        return {
+            "answer": markdown_report,
+            "plot": fig_obj.to_json(),
+            "industry": industry
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error answering question: {str(e)}")
+
+
 # Endpoint to analyze location intelligence based on business query
 @app.post("/location_intelligence", response_model=LocationIntelligenceResponse)
 async def location_intelligence(query: BusinessQuery):
     try:
         # Format the query for agent processing
+
+        # Get industry from the domain and products
+        industry = classify_industry(query.industry, query.product)
+        
         formatted_query = {
-            "industry": query.industry,
+            "industry": industry,
             "product": ", ".join(query.product),
             "location/city": ", ".join(query.location_city),
             "budget": f"{query.budget[0]} - {query.budget[1]}",
