@@ -7,3 +7,14 @@ openai-agents
 pinecone
 boto3
 spacy
+asyncio
+aiohttp
+mcp
+mcp-agent
+plotly
+tavily-python
+snowflake-connector-python
+langchain-openai
+langchain-community
+langchain-core
+langgraph

@@ -137,4 +137,58 @@ async def location_intelligence(query: BusinessQuery):
     
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error processing location intelligence: {str(e)}")
-    
+
+import openai
+from pinecone import Pinecone
+from services.vectordb_expertchat import query_pinecone    
+
+class ExpertChatRequest(BaseModel):
+    expert_key: str
+    namespace: str
+    question: str
+    model: str = "gpt-3.5-turbo"
+
+from fastapi import Request
+import traceback
+
+@app.post("/chat_with_expert")
+def chat_with_expert(request: ExpertChatRequest):
+    try:
+        print(f"[INFO] Question: {request.question}")
+        print(f"[INFO] Namespace: {request.namespace}")
+        print(f"[INFO] Expert Key: {request.expert_key}")
+
+        matches = query_pinecone(request.question, namespace=request.namespace, top_k=7)
+        print(f"[INFO] Matches found: {len(matches)}")
+
+        if not matches:
+            raise HTTPException(status_code=404, detail="No relevant context found.")
+
+        context = "\n\n".join([m["metadata"]["text"] for m in matches])
+        print("[INFO] Context prepared.")
+
+        system_prompt = f"""
+        You are a helpful assistant answering on behalf of {request.expert_key.replace('_', ' ').title()}.
+        Use the following context to answer the user's question:
+        {context}
+        If the question is not related, politely say you can only answer based on this expert's material.
+        """.strip()
+
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": request.question}
+        ]
+
+        response = openai.chat.completions.create(
+            model=request.model,
+            messages=messages
+        )
+        print("[INFO] Got response from OpenAI.")
+
+        answer = response.choices[0].message.content
+        return {"answer": answer}
+
+    except Exception as e:
+        print("[ERROR] Chat failed:")
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Chat failed: {str(e)}")

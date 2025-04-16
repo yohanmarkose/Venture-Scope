@@ -8,6 +8,8 @@ from airflow.utils.dates import days_ago
 
 from services.s3 import S3FileManager
 from services.mistral_orc_processing import pdf_mistralocr_converter
+from services.chunk_strategy import semantic_chunking
+from services.vector_store import create_pinecone_vector_store
 
 
 @dag(
@@ -19,7 +21,7 @@ from services.mistral_orc_processing import pdf_mistralocr_converter
     },
     schedule_interval='@once',
     catchup=False,
-    tags=["vc_reports", "ocr", "markdown","chatboats"],
+    tags=["vc_reports", "ocr", "markdown", "chatboats"],
     max_active_runs=1,
     max_active_tasks=2
 )
@@ -27,15 +29,11 @@ def process_existing_pdfs():
 
     @task
     def get_s3_pdfs():
-        """
-        Return a list of existing S3 PDF paths to process.
-        """
-        # Option 1: Hardcoded paths (for testing/demo)
-        return json.loads(Variable.get("CHATBOT_SOURCE_PDF_FILES", default_var='["chatbot_source_books/BenHorowit.pdf"]'))
+        return json.loads(Variable.get("CHATBOT_SOURCE_PDF_FILES", default_var='["chatbot_source_books/a16z/BenHorowit.pdf"]'))
 
     @task
-    def process_via_mistral_ocr(s3_path: str) -> str:
-        print(f"🔍 Running Mistral OCR for file: {s3_path}")
+    def process_and_index(s3_path: str) -> str:
+        print(f"🔍 Starting OCR + Pinecone for: {s3_path}")
         AWS_BUCKET_NAME = Variable.get("AWS_BUCKET_NAME")
         s3_obj = S3FileManager(AWS_BUCKET_NAME, s3_path)
 
@@ -45,13 +43,24 @@ def process_existing_pdfs():
 
         # Define output path
         output_path = f"{Path(s3_path).parent}/mistral"
-        file_name, content = pdf_mistralocr_converter(pdf_stream, output_path, s3_obj)
+        md_file_path, _ = pdf_mistralocr_converter(pdf_stream, output_path, s3_obj)
 
-        print(f"✅ OCR completed. Markdown saved to: {file_name}")
-        return file_name
+        # Load markdown output
+        print(f"📄 Loading markdown file from S3: {md_file_path}")
+        markdown_text = s3_obj.load_s3_file_content(md_file_path)
 
-    # Run OCR for each path
-    process_via_mistral_ocr.expand(s3_path=get_s3_pdfs())
+        # Chunk and embed
+        print("🔧 Chunking markdown content...")
+        chunks = semantic_chunking(markdown_text, max_sentences=10)
+        print(f"🧠 Total chunks: {len(chunks)}")
+
+        print("📤 Uploading vectors to Pinecone...")
+        create_pinecone_vector_store(md_file_path, chunks)
+
+        return f"✅ Finished processing and indexing: {s3_path}"
+
+    # Chain tasks
+    process_and_index.expand(s3_path=get_s3_pdfs())
 
 
 process_existing_pdfs()

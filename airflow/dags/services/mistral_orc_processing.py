@@ -28,7 +28,6 @@ def pdf_mistralocr_converter(pdf_stream: io.BytesIO, base_path, s3_obj):
         purpose="ocr",
     )
 
-    # Get URL for the uploaded file
     signed_url = client.files.get_signed_url(file_id=uploaded_file.id, expiry=1)
 
     # Process PDF with OCR, including embedded images
@@ -84,15 +83,3 @@ def get_combined_markdown(ocr_response: OCRResponse, s3_obj, base_path) -> str:
         markdowns.append(replace_images_in_markdown(page.markdown, image_data, s3_obj, base_path))
 
     return "\n\n".join(markdowns)
-
-def main():
-    base_path = "nvdia/"
-    
-    s3_obj = S3FileManager(AWS_BUCKET_NAME, base_path)
-    files = list({file for file in s3_obj.list_files() if file.endswith('.pdf')})
-    for file in files:
-        print(file)
-        pdf_file = s3_obj.load_s3_pdf(file)
-        pdf_bytes = io.BytesIO(pdf_file)
-        output_path = f"{s3_obj.base_path}/mistral/{file.split('/')[-1].split('.')[0]}"
-        file_name, markdown_content = pdf_mistralocr_converter(pdf_bytes, output_path, s3_obj)
