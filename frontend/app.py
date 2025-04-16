@@ -9,6 +9,7 @@ from concurrent.futures import ThreadPoolExecutor
 import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime
+import uuid
 
 # Set page configuration
 st.set_page_config(
@@ -176,6 +177,37 @@ st.markdown("""
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
     .reportview-container .main footer {visibility: hidden;}
+    
+    /* Chat styling */
+    .chat-message {
+        padding: 12px;
+        border-radius: 10px;
+        margin-bottom: 10px;
+        display: flex;
+        flex-direction: column;
+        color: #111827; /* Dark text color for all messages */
+    }
+    
+    .user-message {
+        background-color: #e2e8f0;
+        border-top-right-radius: 2px;
+        margin-left: 25%;
+    }
+    
+    .bot-message {
+        background-color: #f1f5f9;
+        border-top-left-radius: 2px;
+        margin-right: 25%;
+    }
+    
+    /* Ensure chat text has good contrast */
+    .chat-message strong {
+        color: #111827; /* Dark color for names */
+    }
+    
+    .chat-message div {
+        color: #111827; /* Dark color for content */
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -243,272 +275,6 @@ def run_async_calls(api_calls):
         
     return results
 
-def create_location_map(locations):
-    """Create a map visualization of locations based on mockup"""
-    if not locations:
-        return None
-    
-    # Create map data
-    map_data = []
-    for loc in locations:
-        # Mock coordinates - in production you would get real geocoding
-        if "Boston" in f"{loc.get('city')}, {loc.get('state')}":
-            lat, lon = 42.3601, -71.0589
-        elif "Chicago" in f"{loc.get('city')}, {loc.get('state')}":
-            lat, lon = 41.8781, -87.6298
-        elif "Manhattan" in f"{loc.get('city')}, {loc.get('state')}":
-            lat, lon = 40.7831, -73.9712
-        elif "New York" in f"{loc.get('city')}, {loc.get('state')}":
-            lat, lon = 40.7128, -74.0060
-        else:
-            # Default to center of US if no match
-            lat, lon = 37.0902, -95.7129
-        
-        map_data.append({
-            "location": f"{loc.get('area')}, {loc.get('city')}, {loc.get('state')}",
-            "lat": lat,
-            "lon": lon,
-            "suitability": loc.get('suitability_score', 5)
-        })
-    
-    if not map_data:
-        return None
-    
-    map_df = pd.DataFrame(map_data)
-    
-    # Create a map in the style of your mockup
-    fig = px.scatter_mapbox(
-        map_df,
-        lat="lat",
-        lon="lon",
-        size="suitability",
-        color="suitability",
-        color_continuous_scale=["#94a3b8", "#3b82f6", "#1d4ed8"],
-        size_max=20,
-        hover_name="location",
-        zoom=5,
-        mapbox_style="carto-positron"
-    )
-    
-    fig.update_layout(
-        margin={"r":0,"t":0,"l":0,"b":0},
-        height=400,
-        coloraxis_colorbar=dict(
-            title="Suitability",
-            tickvals=[min(map_df.suitability), max(map_df.suitability)],
-            ticktext=["Low", "High"]
-        )
-    )
-    
-    return fig
-
-def display_locations(locations):
-    """Display the location intelligence results styled according to the mockup"""
-    if not locations:
-        st.warning("No location data available. Please try adjusting your search criteria.")
-        return
-        
-    # Display recommended locations
-    st.markdown('<div class="section-header">Recommended Locations</div>', unsafe_allow_html=True)
-    
-    # Sort locations by suitability score (highest first)
-    sorted_locations = sorted(locations, key=lambda x: x.get('suitability_score', 0), reverse=True)
-    
-    # Display each location card (styled like the mockup)
-    for i, location in enumerate(sorted_locations):
-        location_name = f"{location.get('area')}, {location.get('city')}, {location.get('state')}"
-        trophy = "🥇" if i == 0 else "🥈" if i == 1 else "🥉" if i == 2 else "📍"
-        
-        with st.expander(f"{trophy} {location_name} - Score: {location.get('suitability_score')}/10"):
-            cols = st.columns([7, 5])
-            
-            with cols[0]:
-                st.markdown("<div style='font-weight:600; margin-bottom:12px;'>Location Profile</div>", unsafe_allow_html=True)
-                
-                # Profile table like in mockup
-                st.markdown(f"""
-                <table class="profile-table">
-                    <tr>
-                        <td>Population Density:</td>
-                        <td>{location.get('population_density', 'N/A')}</td>
-                    </tr>
-                    <tr>
-                        <td>Cost of Living:</td>
-                        <td>{location.get('cost_of_living', 'N/A')}</td>
-                    </tr>
-                    <tr>
-                        <td>Business Climate:</td>
-                        <td>{location.get('business_climate', 'N/A')}</td>
-                    </tr>
-                    <tr>
-                        <td>Quality of Life:</td>
-                        <td>{location.get('quality_of_life', 'N/A')}</td>
-                    </tr>
-                    <tr>
-                        <td>Infrastructure:</td>
-                        <td>{location.get('infrastructure', 'N/A')}</td>
-                    </tr>
-                </table>
-                """, unsafe_allow_html=True)
-                
-                # Advantages and challenges
-                adv_col, chal_col = st.columns(2)
-                
-                with adv_col:
-                    st.markdown("<div style='font-weight:600; margin-bottom:8px;'>Advantages</div>", unsafe_allow_html=True)
-                    for adv in location.get('advantages', []):
-                        st.markdown(f"""
-                        <div class="advantage-item">
-                            <span class="advantage-icon">✓</span>
-                            <span>{adv}</span>
-                        </div>
-                        """, unsafe_allow_html=True)
-                
-                with chal_col:
-                    st.markdown("<div style='font-weight:600; margin-bottom:8px;'>Challenges</div>", unsafe_allow_html=True)
-                    for chal in location.get('challenges', []):
-                        st.markdown(f"""
-                        <div class="challenge-item">
-                            <span class="challenge-icon">⚠️</span>
-                            <span>{chal}</span>
-                        </div>
-                        """, unsafe_allow_html=True)
-            
-            with cols[1]:
-                st.markdown("<div style='font-weight:600; margin-bottom:12px;'>Suitability Analysis</div>", unsafe_allow_html=True)
-                
-                # Create suitability score gauge exactly like mockup
-                fig_suitability = go.Figure(go.Indicator(
-                    mode = "gauge+number",
-                    value = location.get('suitability_score', 0),
-                    domain = {'x': [0, 1], 'y': [0, 1]},
-                    number = {'font': {'size': 44, 'color': '#475569'}},
-                    title = {'text': "Suitability Score", 'font': {'size': 14, 'color': '#64748b'}},
-                    gauge = {
-                        'axis': {'range': [0, 10], 'tickwidth': 1, 'tickfont': {'size': 12}},
-                        'bar': {'color': "#3b82f6", 'thickness': 0.6},
-                        'steps': [
-                            {'range': [0, 2], 'color': "#fef9c3"},
-                            {'range': [2, 4], 'color': "#fef9c3"},
-                            {'range': [4, 6], 'color': "#bfdbfe"},
-                            {'range': [6, 8], 'color': "#bfdbfe"},
-                            {'range': [8, 10], 'color': "#bbf7d0"}
-                        ],
-                        'threshold': {
-                            'line': {'color': "red", 'width': 2},
-                            'thickness': 0.6,
-                            'value': 7
-                        }
-                    }
-                ))
-                
-                fig_suitability.update_layout(height=200, margin=dict(l=30, r=30, t=30, b=20))
-                st.plotly_chart(fig_suitability, use_container_width=True, key=f"suitability_{i}")
-                
-                # Create risk score gauge
-                fig_risk = go.Figure(go.Indicator(
-                    mode = "gauge+number",
-                    value = location.get('risk_score', 0),
-                    domain = {'x': [0, 1], 'y': [0, 1]},
-                    number = {'font': {'size': 44, 'color': '#475569'}},
-                    title = {'text': "Risk Score", 'font': {'size': 14, 'color': '#64748b'}},
-                    gauge = {
-                        'axis': {'range': [0, 10], 'tickwidth': 1, 'tickfont': {'size': 12}},
-                        'bar': {'color': "#ef4444", 'thickness': 0.6},
-                        'steps': [
-                            {'range': [0, 2], 'color': "#bbf7d0"},
-                            {'range': [2, 4], 'color': "#bbf7d0"},
-                            {'range': [4, 6], 'color': "#fef9c3"},
-                            {'range': [6, 8], 'color': "#fef9c3"},
-                            {'range': [8, 10], 'color': "#fee2e2"}
-                        ],
-                        'threshold': {
-                            'line': {'color': "green", 'width': 2},
-                            'thickness': 0.6,
-                            'value': 3
-                        }
-                    }
-                ))
-                
-                fig_risk.update_layout(height=200, margin=dict(l=30, r=30, t=30, b=20))
-                st.plotly_chart(fig_risk, use_container_width=True, key=f"risk_{i}")
-
-def display_competitors(competitors):
-    """Display the competitors data in a production-grade UI"""
-    if not competitors:
-        st.warning("No competitor data available.")
-        return
-    
-    st.markdown('<div class="section-header">Competitive Landscape</div>', unsafe_allow_html=True)
-    
-    # Display in a grid layout
-    cols = st.columns(2)
-    
-    # Sort competitors by some relevant metric
-    sorted_competitors = sorted(
-        competitors, 
-        key=lambda x: (x.get('growth_score', 0) + x.get('customer_satisfaction_score', 0)), 
-        reverse=True
-    )
-    
-    # Display each competitor in a card
-    for i, comp in enumerate(sorted_competitors):
-        with cols[i % 2].expander(f"🏢 {comp.get('name')}"):
-            st.markdown(f"""
-            <div style="margin-bottom:16px;">
-                <div style="font-weight:600; margin-bottom:8px;">Company Overview</div>
-                <table style="width:100%;">
-                    <tr>
-                        <td style="padding:4px 0; width:40%"><strong>Industry:</strong></td>
-                        <td>{comp.get('industry', 'N/A')}</td>
-                    </tr>
-                    <tr>
-                        <td style="padding:4px 0"><strong>Size:</strong></td>
-                        <td>{comp.get('size', 'N/A')}</td>
-                    </tr>
-                    <tr>
-                        <td style="padding:4px 0"><strong>Address:</strong></td>
-                        <td>{comp.get('address', 'N/A')}</td>
-                    </tr>
-                    <tr>
-                        <td style="padding:4px 0"><strong>Revenue:</strong></td>
-                        <td>{comp.get('revenue', 'N/A')}</td>
-                    </tr>
-                    <tr>
-                        <td style="padding:4px 0"><strong>Market Share:</strong></td>
-                        <td>{comp.get('market_share', 'N/A')}</td>
-                    </tr>
-                </table>
-            </div>
-            """, unsafe_allow_html=True)
-            
-            # Key metrics
-            metrics = st.columns(3)
-            with metrics[0]:
-                st.metric("Growth Score", f"{comp.get('growth_score', 'N/A')}/10")
-            with metrics[1]:
-                st.metric("Satisfaction", f"{comp.get('customer_satisfaction_score', 'N/A')}/10")
-            with metrics[2]:
-                st.metric("Rating", f"{comp.get('rating', 'N/A')}")
-            
-            # USP
-            st.markdown(f"""
-            <div class="alert alert-info">
-                <div style="font-weight:600; margin-bottom:4px;">Unique Selling Proposition</div>
-                <p>{comp.get('unique_selling_proposition', 'No information available')}</p>
-            </div>
-            """, unsafe_allow_html=True)
-            
-            # Reviews
-            if comp.get('reviews'):
-                st.markdown('<div style="font-weight:600; margin-bottom:8px;">Customer Reviews</div>', unsafe_allow_html=True)
-                for review in comp.get('reviews', []):
-                    st.markdown(f"""
-                    <div style="background-color:#f8fafc; padding:10px; border-radius:6px; margin-bottom:8px;">
-                        💬 {review}
-                    </div>
-                    """, unsafe_allow_html=True)
-
 def main():
     # Page title
     st.title("Venture Scope Dashboard")
@@ -520,6 +286,10 @@ def main():
         st.session_state.api_results = None
     if "submitted" not in st.session_state:
         st.session_state.submitted = False
+    if "chatbot_session_id" not in st.session_state:
+        st.session_state.chatbot_session_id = str(uuid.uuid4())
+    if "chat_history_display" not in st.session_state:
+        st.session_state.chat_history_display = []
     
     # Sidebar configuration
     st.sidebar.markdown("<div style='font-weight:600; font-size:18px; margin-bottom:16px;'>Business Configuration</div>", unsafe_allow_html=True)
@@ -587,7 +357,7 @@ def main():
             placeholder = st.empty()
             with placeholder:
                 st.markdown("""
-                <div class="alert alert-info" style="text-align:center;">
+                <div class="alert alert-info" style="text-align:center; padding:30px;">
                     <div style="font-size:24px; margin-bottom:12px;">🔍 Analyzing Your Business</div>
                     <p>We're processing your request. This typically takes 30-60 seconds.</p>
                 </div>
@@ -595,7 +365,9 @@ def main():
             
             # Call the API
             api_calls = [
-                ("location_intelligence", "location_intelligence", data)
+                # ("location_intelligence", "location_intelligence", data)
+                ("market_analysis", "market_analysis", data)
+                # ("q_and_a", "q_and_a", data)
             ]
             
             with st.spinner():
@@ -604,6 +376,9 @@ def main():
             
             # Remove loading message
             placeholder.empty()
+            
+            # Reset chat history on new analysis
+            st.session_state.chat_history_display = []
             
             # Force UI refresh
             st.rerun()
@@ -616,10 +391,10 @@ def main():
     
     # Display results if available
     if st.session_state.submitted and st.session_state.api_results:
-        location_data = st.session_state.api_results.get("location_intelligence", {})
+        market_data = st.session_state.api_results.get("market_analysis", {})
         
-        if "error" in location_data:
-            st.error(f"Error retrieving data: {location_data['error']}")
+        if "error" in market_data:
+            st.error(f"Error retrieving data: {market_data['error']}")
         else:
             # Display analysis summary
             st.markdown(f"""
@@ -630,47 +405,121 @@ def main():
             """, unsafe_allow_html=True)
             
             # Display tabs that match the mockups
-            market_analysis, location_intelligence, market_competition = st.tabs([
+            market_analysis, location_intelligence, market_competition, qa_tab = st.tabs([
                 "📊 Market Analysis", 
                 "🗺️ Location Intelligence", 
-                "🏢 Market Competition"
+                "🏢 Market Competition",
+                "⁉️ Q & A"
             ])
             
             with market_analysis:
                 st.markdown('<div class="section-header">Market Overview</div>', unsafe_allow_html=True)
-                
-                # Market metrics
-                col1, col2, col3 = st.columns(3)
-                with col1:
-                    st.metric("Market Size", "$4.2T", "↑ 8.3%")
-                with col2:
-                    st.metric("Annual Growth Rate", "5.8%", "↑ 0.7%")
-                with col3:
-                    st.metric("Market Potential", "High", "")
-                
-                # Market insights
+                fig = go.Figure(json.loads(market_data.get("plot")))
+                st.header(market_data.get("industry"))
+                st.plotly_chart(fig)
+                st.markdown(market_data.get("answer"))
+
+            with location_intelligence:
                 st.markdown("""
-                <div class="alert alert-info" style="margin-top:20px;">
-                    <div style="font-weight:600; margin-bottom:8px;">Industry Insights</div>
-                    <p>The selected industry shows strong growth potential with increasing consumer demand for premium quality products. Market conditions favor businesses with a strong unique selling proposition focused on sustainability and local sourcing.</p>
+                <div class="alert alert-info" style="text-align:center; padding:20px;">
+                    <div style="font-size:18px; margin-bottom:10px;">Location Analysis</div>
+                    <p>Location intelligence data is not available in this demo version. In the full application, this tab would show detailed location analysis and recommendations.</p>
                 </div>
                 """, unsafe_allow_html=True)
-            
-            with location_intelligence:
-                if "locations" in location_data:
-                    display_locations(location_data.get("locations", []))
-                else:
-                    st.warning("No location data available.")
-                if "competitors" in location_data:
-                    display_competitors(location_data.get("competitors", []))
-                else:
-                    st.warning("No competitor data available.")
-            
+                
+            with market_competition:
+                st.markdown("""
+                <div class="alert alert-info" style="text-align:center; padding:20px;">
+                    <div style="font-size:18px; margin-bottom:10px;">Competitor Analysis</div>
+                    <p>Competitor analysis data is not available in this demo version. In the full application, this tab would show detailed competitive landscape information.</p>
+                </div>
+                """, unsafe_allow_html=True)
+
+            with qa_tab:
+                st.markdown('<div class="section-header">Q & A</div>', unsafe_allow_html=True)
+                
+                # Add description
+                st.markdown("Ask questions about your business analysis and get personalized answers based on the generated reports.")
+
+                chat_container = st.container()
+                
+                # Display chat history
+                with chat_container:
+                    for chat in st.session_state.chat_history_display:
+                        if chat["role"] == "user":
+                            st.markdown(f"""
+                            <div class="chat-message user-message">
+                                <div><strong>You:</strong></div>
+                                <div>{chat["content"]}</div>
+                            </div>
+                            """, unsafe_allow_html=True)
+                        else:
+                            st.markdown(f"""
+                            <div class="chat-message bot-message">
+                                <div><strong>Assistant:</strong></div>
+                                <div>{chat["content"]}</div>
+                            </div>
+                            """, unsafe_allow_html=True)
+                
+                # Create input for user question
+                user_question = st.text_input("Ask a question about your business:", placeholder="e.g., What are the main competitors in this industry?")
+                
+                # Submit button
+                if st.button("Ask") and user_question:
+                    # Add user message to display history
+                    st.session_state.chat_history_display.append({"role": "user", "content": user_question})
+                    
+                    # Prepare message history for API call
+                    message_history = []
+                    # Convert display history to message history format
+                    for msg in st.session_state.chat_history_display:
+                        message_history.append({
+                            "type": "human" if msg["role"] == "user" else "ai", 
+                            "content": msg["content"]
+                        })
+                    
+                    # Prepare data for API call
+                    qa_data = {
+                        "industry": selected_industry,
+                        "product": st.session_state.products,
+                        "location/city": selected_city,
+                        "budget": list(budget_range),  # Convert tuple to list for JSON
+                        "size": size,
+                        "unique_selling_proposition": additional_details,
+                        "question": user_question,
+                        "session_id": st.session_state.chatbot_session_id,
+                        "message_history": message_history
+                    }
+                    
+                    with st.spinner("Processing your question..."):
+                        try:
+                            # Make API call to get answer
+                            response = requests.post(
+                                f"{API_URL}/q_and_a",
+                                json=qa_data
+                            )
+                            
+                            if response.status_code == 200:
+                                answer = response.json().get("answer", "Sorry, I couldn't process your request.")
+                                
+                                # Add to display history
+                                st.session_state.chat_history_display.append({"role": "assistant", "content": answer})
+                                
+                                # Force refresh to update the UI
+                                st.rerun()
+                            else:
+                                st.error(f"Error: {response.status_code} - {response.text}")
+                        except Exception as e:
+                            st.error(f"Error processing request: {str(e)}")
+                            import traceback
+                            st.error(traceback.format_exc())
+
             # Add a button to start a new analysis
             if st.button("Start New Analysis", type="primary"):
                 st.session_state.submitted = False
                 st.session_state.api_results = None
                 st.session_state.products = []
+                st.session_state.chat_history_display = []
                 st.rerun()
     
     # Show welcome screen when not submitted

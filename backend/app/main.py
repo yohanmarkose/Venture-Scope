@@ -1,16 +1,30 @@
 import io, os, time, base64, asyncio, json
 from io import BytesIO
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from typing import List, Dict, Any, Optional, Tuple, Union
 from features.mcp.google_maps.location_intelligence import start_location_intelligence
 from features.ma_agent import run_agents
+from features.qa_agent import create_qa_chatbot, handle_user_message_with_history
+from langchain_core.messages import HumanMessage, AIMessage
+
+from features.snowflake_fns import SnowflakeConnector
 import asyncio
 import aiohttp
 from concurrent.futures import ThreadPoolExecutor
-from dotenv import load_dotenv
-load_dotenv()
+
 import openai
+import uuid
+
+import pandas as pd
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+
+from dotenv import load_dotenv
+import os
+load_dotenv()
 
 class MarketAnalysisRequest(BaseModel):
     domain: str
@@ -78,6 +92,18 @@ INDUSTRIES = [
     "gambling & casinos"
 ]
 
+state_abbrev = {
+    'Alabama': 'AL', 'Alaska': 'AK', 'Arizona': 'AZ', 'Arkansas': 'AR', 'California': 'CA',
+    'Colorado': 'CO', 'Connecticut': 'CT', 'Delaware': 'DE', 'Florida': 'FL', 'Georgia': 'GA',
+    'Hawaii': 'HI', 'Idaho': 'ID', 'Illinois': 'IL', 'Indiana': 'IN', 'Iowa': 'IA',
+    'Kansas': 'KS', 'Kentucky': 'KY', 'Louisiana': 'LA', 'Maine': 'ME', 'Maryland': 'MD',
+    'Massachusetts': 'MA', 'Michigan': 'MI', 'Minnesota': 'MN', 'Mississippi': 'MS', 'Missouri': 'MO',
+    'Montana': 'MT', 'Nebraska': 'NE', 'Nevada': 'NV', 'New Hampshire': 'NH', 'New Jersey': 'NJ',
+    'New Mexico': 'NM', 'New York': 'NY', 'North Carolina': 'NC', 'North Dakota': 'ND', 'Ohio': 'OH',
+    'Oklahoma': 'OK', 'Oregon': 'OR', 'Pennsylvania': 'PA', 'Rhode Island': 'RI', 'South Carolina': 'SC',
+    'South Dakota': 'SD', 'Tennessee': 'TN', 'Texas': 'TX', 'Utah': 'UT', 'Vermont': 'VT',
+    'Virginia': 'VA', 'Washington': 'WA', 'West Virginia': 'WV', 'Wisconsin': 'WI', 'Wyoming': 'WY'
+}
 
 # Models
 class BusinessQuery(BaseModel):
@@ -87,9 +113,10 @@ class BusinessQuery(BaseModel):
     budget: Tuple[int, int] = Field(..., description="Budget range in currency format (min, max)")
     size: str = Field(..., description="Size classification of the business")
     unique_selling_proposition: Optional[str] = Field(None, description="Key differentiators or unique value propositions")
+    question: Optional[str] = Field(None, description="User's question or query related to the business")
     
     model_config = {
-        "validate_by_name": True,
+        "populate_by_name": True,
         "json_schema_extra": {
             "example": {
                 "industry": "Food and Beverage",
@@ -100,6 +127,25 @@ class BusinessQuery(BaseModel):
                 "unique_selling_proposition": "High Quality, Organic, Locally Sourced Ingredients"
             }
         }
+    }
+
+class MessageItem(BaseModel):
+    type: str  # "human" or "ai"
+    content: str
+
+class QuestionRequest(BaseModel):
+    question: str
+    industry: str
+    product: List[str]
+    location_city: List[str] = Field(..., alias="location/city")
+    budget: List[float]
+    size: str
+    unique_selling_proposition: Optional[str] = None
+    session_id: Optional[str] = None
+    message_history: Optional[List[MessageItem]] = None
+    
+    model_config = {
+        "populate_by_name": True
     }
 
 class Competitor(BaseModel):
@@ -132,6 +178,18 @@ class Location(BaseModel):
 class LocationIntelligenceResponse(BaseModel):
     locations: List[Location]
     competitors: List[Competitor]
+
+# Add validation error handler
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    print(f"Validation error: {exc.errors()}")
+    body = await request.body()
+    body_str = body.decode() if isinstance(body, bytes) else str(body)
+    print(f"Request body: {body_str}")
+    return JSONResponse(
+        status_code=422,
+        content={"detail": exc.errors(), "body": body_str}
+    )
     
 async def async_send_to_api(session, api, data):
     """Send data to the API asynchronously and return the response"""
@@ -169,7 +227,7 @@ def run_async_calls(api_calls):
 
 # API Endpoints    
 
-# Root endpoint to check if the server is running 
+# Root endpoint to check if the server is running
 @app.get("/")
 def read_root():
     return "Welcome to the Venture-Scope API!"
@@ -191,8 +249,11 @@ def market_analysis(query: BusinessQuery):
         
         # Get industry from the domain and products
         industry = classify_industry(formatted_query["industry"], formatted_query["product"])
-        print("Industry selected is:", industry)    
+        print("Industry selected is:", industry)
 
+        print("\n\n got till before plot\n\n")
+        fig_obj = get_graph(industry)
+        print("\n\n got till after plot\n\n")
         runnable = run_agents(industry, size_category)
         out = runnable.invoke({ 
             "chat_history": [],
@@ -203,15 +264,82 @@ def market_analysis(query: BusinessQuery):
 
         print(out)
         answer = out["intermediate_steps"][-1].tool_input
-
         markdown_report = convert_report_to_markdown(answer)
 
         print("Answer:\n", markdown_report)
         
         return {
-            "answer": markdown_report
+            "answer": markdown_report,
+            "plot": fig_obj.to_json(),
+            "industry": industry
         }
     except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error answering question: {str(e)}")
+
+active_chatbots = {}
+@app.post("/q_and_a")
+def question_and_analysis(query: QuestionRequest):
+    try:
+        print(f"Received question: {query.question}")
+        print(f"Session ID: {query.session_id}")
+        
+        # Process message history if provided
+        message_history = []
+        if query.message_history:
+            print(f"Message history provided with {len(query.message_history)} items")
+            for msg in query.message_history:
+                if msg.type == "human":
+                    message_history.append(HumanMessage(content=msg.content))
+                elif msg.type == "ai":
+                    message_history.append(AIMessage(content=msg.content))
+        
+        # If no history or only has AI messages, add the current question
+        if not message_history or all(isinstance(msg, AIMessage) for msg in message_history):
+            message_history.append(HumanMessage(content=query.question))
+            
+        # Prepare report data
+        report_data = {
+            "market_analysis": f"{query.industry}, {query.size}",
+            "emerging_trends": query.industry,
+            "location_intelligence": query.location_city,
+            "recommendations": f"{query.industry}, {query.size}, {query.budget}"
+        }
+        print("Report data:", report_data)
+        
+        # Create or get existing chatbot session
+        session_id = query.session_id or str(uuid.uuid4())
+        print("Session ID:", session_id)
+        
+        if session_id not in active_chatbots:
+            # Create new chatbot instance with the specific session ID
+            print("Creating new chatbot instance")
+            chatbot = create_qa_chatbot(report_data)
+            print("Chatbot instance created")
+            chatbot = chatbot.with_config(
+                {"thread": {"configurable": {"session_id": session_id}}}
+            )
+            print("Chatbot instance configured")
+            active_chatbots[session_id] = (chatbot, report_data)
+            print("Chatbot instance stored")
+        else:
+            # Get existing chatbot
+            chatbot, stored_report_data = active_chatbots[session_id]
+            # Update report data if needed
+            report_data = {**stored_report_data, **report_data}
+            active_chatbots[session_id] = (chatbot, report_data)
+        
+        # Process the user's question with message history
+        response = handle_user_message_with_history(chatbot, message_history, report_data)
+        print("Response from chatbot:", response)
+        
+        return {
+            "answer": response,
+            "session_id": session_id
+        }
+    except Exception as e:
+        import traceback
+        print(f"Error in question_and_analysis: {str(e)}")
+        print(traceback.format_exc())
         raise HTTPException(status_code=500, detail=f"Error answering question: {str(e)}")
 
 
@@ -245,7 +373,111 @@ Return ONLY one industry name from the list.
     except Exception as e:
         print(f"Error classifying industry: {e}")
         return None
+
+def get_graph(industry):
+    print("Starting")
+    snow_obj = SnowflakeConnector(industry)
+    print("Connecting to Snowflake...")
+    snow_obj.connect()
+    print("Connected to Snowflake!")
+    df = snow_obj.get_statewise_count_by_industry(industry)
+    print("Data fetched from Snowflake!")
+    snow_obj.disconnect()
+    df['REGION'] = df['REGION'].str.title()
+    for region in df['REGION'].unique():
+        if region not in state_abbrev:
+            print(f"Warning: '{region}' is not a recognized US state name")
+
+    df['state_code'] = df['REGION'].map(state_abbrev)
+
+    state_totals = df.groupby('REGION')['COUNT'].sum().reset_index()
+    state_totals['state_code'] = state_totals['REGION'].map(state_abbrev)
+
+    size_order = ['1-10', '11-50', '51-200', '201-500', '501-1000', '1001-5000', '5001-10000', '10000+']
+    df['SIZE_CATEGORY'] = pd.Categorical(df['SIZE_CATEGORY'], categories=size_order, ordered=True)
+
+    size_pivot = df.pivot_table(
+        values='COUNT', 
+        index='REGION', 
+        columns='SIZE_CATEGORY',
+        aggfunc='sum',
+        fill_value=0
+    )
+    size_pivot_normalized = size_pivot.div(size_pivot.sum(axis=1), axis=0) * 100
+    size_pivot_normalized['state_code'] = size_pivot_normalized.index.map(state_abbrev)
+    fig = make_subplots(
+        rows=1, cols=1,
+        specs=[[{"type": "choropleth"}]]
+    )
     
+    fig.add_trace(
+        go.Choropleth(
+            locations=state_totals['state_code'],
+            z=state_totals['COUNT'],
+            locationmode='USA-states',
+            colorscale='Viridis',
+            colorbar_title="Total Companies",
+            name=f"Total {industry.title()} Companies",
+            marker_line_color='white',
+            marker_line_width=0.5,
+            hovertemplate='<b>%{location}</b><br>' +
+                            'Total Companies: %{z}<br>' +
+                            '<extra></extra>'
+        ),
+        row=1, col=1
+    )
+
+    size_data = []
+    for state in state_totals['REGION']:
+        if state in size_pivot.index:
+            for size_cat in size_order:
+                if size_cat in size_pivot.columns:
+                    value = size_pivot.loc[state, size_cat] if size_cat in size_pivot.columns else 0
+                    pct = size_pivot_normalized.loc[state, size_cat] if size_cat in size_pivot_normalized.columns else 0
+                    
+                    # Add hover data
+                    fig.add_trace(
+                        go.Scatter(
+                            x=[state_abbrev.get(state, "")],
+                            y=[0],
+                            mode='markers',
+                            marker=dict(size=0, color='rgba(0,0,0,0)'),
+                            hoverinfo='text',
+                            hovertemplate=f'<b>{state}</b><br>' +
+                                         f'Size: {size_cat}<br>' +
+                                         f'Count: {value}<br>' +
+                                         f'Percentage: {pct:.1f}%<br>' +
+                                         '<extra></extra>',
+                            showlegend=False
+                        )
+                    )
+    fig.update_layout(
+        title_text=f'US {industry.title()} Industry Distribution by State',
+        title_x=0.5,
+        geo=dict(
+            scope='usa',
+            projection=go.layout.geo.Projection(type='albers usa'),
+            showlakes=True,
+            lakecolor='rgb(255, 255, 255)'
+        ),
+        height=600,
+        width=950,
+        margin=dict(l=0, r=0, t=50, b=0),
+        showlegend=False
+    )
+    fig.add_annotation(
+        x=0.5,
+        y=-0.1,
+        xref='paper',
+        yref='paper',
+        text='Hover over states to see size category distribution',
+        showarrow=False,
+        font=dict(size=12)
+    )
+    return fig
+
+
+
 def convert_report_to_markdown(report_dict):
     """
     Converts a market analysis report dictionary to markdown format.
@@ -333,4 +565,3 @@ async def location_intelligence(query: BusinessQuery):
     
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error processing location intelligence: {str(e)}")
-    

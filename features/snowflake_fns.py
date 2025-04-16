@@ -107,8 +107,17 @@ class SnowflakeConnector:
         ORDER BY PERFORMANCE_SCORE DESC
         LIMIT {limit};
         """
-        
         return self.execute_query(query_normal)
+    
+    def get_statewise_count_by_industry(self, industry):
+        """Get count of companies in each state filtered by industry"""
+        query = f"""
+        SELECT region, size_catagory as size_category, count(*) as count 
+        FROM enhanced_companies 
+        WHERE industry LIKE '%{industry}%' 
+        GROUP BY region, size_catagory
+        """
+        return self.execute_query(query)
     
     def get_top_performers_by_region(self, region, limit=20):
         """Get top performing companies in a specific region"""
