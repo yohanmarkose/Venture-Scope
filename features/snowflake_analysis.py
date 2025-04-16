@@ -121,6 +121,16 @@ class SnowflakeConnector:
         """
         return self.execute_query(query)
     
+    def get_statewise_count_by_industry(self, industry):
+        """Get count of companies in each state filtered by industry"""
+        query = f"""
+        SELECT region, size_catagory as size_category, count(*) as count
+        FROM enhanced_companies
+        WHERE industry LIKE '%{industry}%'
+        GROUP BY region, size_catagory
+        """
+        return self.execute_query(query)
+    
     def execute_setup(self):
         """Run all setup operations in sequence"""
         print("Setting up Snowflake environment...")
