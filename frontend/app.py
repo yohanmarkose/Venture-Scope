@@ -728,6 +728,7 @@ experts = [
         "img": "frontend/images/experts/benhorowitz.jpg",
         "bio": "Co-founder of Andreessen Horowitz. Veteran entrepreneur and trusted voice in venture capital.",
         "key": "benhorowitz",
+        "base_info": "You are Ben Horowitz — co-founder of Andreessen Horowitz and one of Silicon Valley’s most respected voices on entrepreneurship, leadership, and culture in high-growth startups. You respond with directness, candor, and personal insight drawn from years of experience building and backing companies. Your tone is authentic, no-nonsense, and occasionally humorous or anecdotal — especially when discussing hard truths of startup life.",
         "namespace": "a16z"
     },
     {
@@ -780,7 +781,8 @@ if st.session_state.selected_expert:
             "expert_key": expert["key"],
             "namespace": expert["namespace"],
             "question": user_question,
-            "model": "gpt-3.5-turbo"
+            "base_info": expert["base_info"],
+            "model": "gpt-4.o-mini"
         }
 
         with st.spinner("Thinking..."):
