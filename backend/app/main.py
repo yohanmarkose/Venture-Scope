@@ -139,56 +139,69 @@ async def location_intelligence(query: BusinessQuery):
         raise HTTPException(status_code=500, detail=f"Error processing location intelligence: {str(e)}")
 
 import openai
+import traceback
 from pinecone import Pinecone
-from services.vectordb_expertchat import query_pinecone    
+from fastapi import HTTPException
+from services.vectordb_expertchat import query_pinecone
+from pydantic import BaseModel
 
 class ExpertChatRequest(BaseModel):
     expert_key: str
     namespace: str
     question: str
-    model: str = "gpt-3.5-turbo"
-
-from fastapi import Request
-import traceback
+    model: str = "gpt-4o-mini"
 
 @app.post("/chat_with_expert")
 def chat_with_expert(request: ExpertChatRequest):
     try:
-        print(f"[INFO] Question: {request.question}")
-        print(f"[INFO] Namespace: {request.namespace}")
-        print(f"[INFO] Expert Key: {request.expert_key}")
+        print(f"[INFO] Incoming Chat Request:\n - Expert: {request.expert_key}\n - Namespace: {request.namespace}\n - Question: {request.question}")
 
+        # Fetch relevant context from Pinecone
         matches = query_pinecone(request.question, namespace=request.namespace, top_k=7)
-        print(f"[INFO] Matches found: {len(matches)}")
+        print(f"[INFO] Matches retrieved: {len(matches)}")
 
         if not matches:
-            raise HTTPException(status_code=404, detail="No relevant context found.")
+            return {
+                "answer": f"📄 I couldn't find any relevant information from {request.expert_key.title()}'s material to answer your question. Try asking something more related to their expertise."
+            }
 
-        context = "\n\n".join([m["metadata"]["text"] for m in matches])
-        print("[INFO] Context prepared.")
+        # Extract and structure context
+        context_chunks = [m["metadata"]["text"] for m in matches if "text" in m.get("metadata", {})]
+        context = "\n\n".join(context_chunks)
 
+        # Expert role prompt
+        expert_name = request.expert_key.replace('_', ' ').title()
         system_prompt = f"""
-        You are a helpful assistant answering on behalf of {request.expert_key.replace('_', ' ').title()}.
-        Use the following context to answer the user's question:
-        {context}
-        If the question is not related, politely say you can only answer based on this expert's material.
-        """.strip()
+            You are {expert_name}, a renowned expert in your field. You are known for your authentic voice and sharp, insightful communication.
 
+            Your task is to respond ONLY using insights, philosophies, and ideas that can be found in the material provided below.
+
+            If the user’s question cannot be answered based on this material, kindly reply with:  
+            “I’m sorry, but I can only respond based on the documented insights and material provided.”
+
+            --- Begin Reference Material ---
+            {context}
+            --- End Reference Material ---
+
+            Always respond in the tone and style of {expert_name}, making it feel like they are personally responding.
+            """.strip()
+         
         messages = [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": request.question}
         ]
 
+        print(f"[INFO] Sending request to OpenAI with {len(messages)} messages...")
         response = openai.chat.completions.create(
             model=request.model,
             messages=messages
         )
-        print("[INFO] Got response from OpenAI.")
+        print("[INFO] Received response from OpenAI.")
 
-        answer = response.choices[0].message.content
+        answer = response.choices[0].message.content.strip()
         return {"answer": answer}
 
     except Exception as e:
-        print("[ERROR] Chat failed:")
+        print("[ERROR] Exception occurred during expert chat:")
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Chat failed: {str(e)}")
