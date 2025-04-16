@@ -82,8 +82,6 @@ class SnowflakeConnector:
 
         table_name = "ENHANCED_COMPANIES"
         where_clause = f"WHERE INDUSTRY LIKE '%{self.industry}%'"
-        if self.size_category:
-            where_clause += f" AND SIZE_CATAGORY = '{self.size_category}'"
         
         if self.size_category and self.size_category.lower() == "large":
             where_clause += f" AND MARKET_CAP IS NOT NULL"
@@ -98,7 +96,7 @@ class SnowflakeConnector:
             return self.execute_query(query_large)
         
         if self.size_category:
-            where_clause += f" AND SIZE_CATAGORY = '{self.size_category}'"
+            where_clause += f" AND SIZE_CATAGORY ILIKE '{self.size_category}'"
         
         query_normal = f"""
         SELECT *
@@ -107,7 +105,6 @@ class SnowflakeConnector:
         ORDER BY PERFORMANCE_SCORE DESC
         LIMIT {limit};
         """
-        
         return self.execute_query(query_normal)
     
     def get_top_performers_by_region(self, region, limit=20):

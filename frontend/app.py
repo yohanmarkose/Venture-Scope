@@ -681,7 +681,7 @@ def main():
             with market_analysis:
                 st.markdown('<div class="section-header">Market Overview</div>', unsafe_allow_html=True)
                 fig = go.Figure(json.loads(market_data.get("plot")))
-                st.header(market_data.get("industry"))
+                st.header(market_data.get("industry").title())
                 st.plotly_chart(fig)
                 st.markdown(market_data.get("answer"))
             
@@ -779,6 +779,7 @@ def main():
                 st.session_state.submitted = False
                 st.session_state.api_results = None
                 st.session_state.products = []
+                st.session_state.chat_history_display = []
                 st.rerun()
     
     # Show welcome screen when not submitted
