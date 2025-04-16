@@ -375,7 +375,7 @@ def display_locations(locations):
                         """, unsafe_allow_html=True)
             
             with cols[1]:
-                st.markdown("<div style='font-weight:600; margin-bottom:12px;'>Suitability Analysis</div>", unsafe_allow_html=True)
+                st.markdown("<div style='font-weight:600; margin-bottom:12px; text-align:center;'>Suitability Analysis</div>", unsafe_allow_html=True)
                 
                 # Create suitability score gauge exactly like mockup
                 fig_suitability = go.Figure(go.Indicator(
@@ -402,8 +402,24 @@ def display_locations(locations):
                     }
                 ))
                 
-                fig_suitability.update_layout(height=200, margin=dict(l=30, r=30, t=30, b=20))
+                fig_suitability.update_layout(
+                    height=200, 
+                    margin=dict(l=30, r=30, t=50, b=20),
+                    annotations=[
+                        dict(
+                            x=0.5,
+                            y=0.1,
+                            text=f"{location.get('suitability_score', 0)}",
+                            font=dict(size=44, color="#475569"),
+                            showarrow=False
+                        )
+                    ],
+                    showlegend=False,
+                )
+                fig_suitability.data[0].mode = "gauge"
                 st.plotly_chart(fig_suitability, use_container_width=True, key=f"suitability_{i}")
+
+                st.markdown("<div style='font-weight:600; margin-bottom:12px; text-align:center;'>Risk Analysis</div>", unsafe_allow_html=True)
                 
                 # Create risk score gauge
                 fig_risk = go.Figure(go.Indicator(
@@ -430,7 +446,22 @@ def display_locations(locations):
                     }
                 ))
                 
-                fig_risk.update_layout(height=200, margin=dict(l=30, r=30, t=30, b=20))
+                fig_risk.update_layout(
+                    height=200, 
+                    margin=dict(l=30, r=30, t=50, b=20),
+                    annotations=[
+                        dict(
+                            x=0.5,
+                            y=0.1,
+                            text=f"{location.get('risk_score', 0)}",
+                            font=dict(size=44, color="#475569"),
+                            showarrow=False
+                        )
+                    ],
+                    showlegend=False
+                )
+                
+                fig_risk.data[0].mode = "gauge"
                 st.plotly_chart(fig_risk, use_container_width=True, key=f"risk_{i}")
 
 def display_competitors(competitors):
@@ -565,7 +596,8 @@ def main():
     st.sidebar.markdown("<div style='font-weight:600; font-size:18px; margin-top:24px; margin-bottom:16px;'>Business Details</div>", unsafe_allow_html=True)
     
     size = st.sidebar.selectbox("What is the size of business?", 
-                             ["Startup", "Small Enterprise", "Medium Enterprise", "MNC"])
+                             ["Small", "Medium", "Large"])
+    size = "small" if size == "Small" else "medium" if size == "large" else "Large"
     additional_details = st.sidebar.text_area("What is your Unique Selling Proposition?")
     
     # Submit button
@@ -595,6 +627,7 @@ def main():
             
             # Call the API
             api_calls = [
+                ("market_analysis", "market_analysis", data),
                 ("location_intelligence", "location_intelligence", data)
             ]
             
@@ -616,6 +649,8 @@ def main():
     
     # Display results if available
     if st.session_state.submitted and st.session_state.api_results:
+        
+        market_data = st.session_state.api_results.get("market_analysis", {})
         location_data = st.session_state.api_results.get("location_intelligence", {})
         
         if "error" in location_data:
@@ -639,22 +674,7 @@ def main():
             with market_analysis:
                 st.markdown('<div class="section-header">Market Overview</div>', unsafe_allow_html=True)
                 
-                # Market metrics
-                col1, col2, col3 = st.columns(3)
-                with col1:
-                    st.metric("Market Size", "$4.2T", "↑ 8.3%")
-                with col2:
-                    st.metric("Annual Growth Rate", "5.8%", "↑ 0.7%")
-                with col3:
-                    st.metric("Market Potential", "High", "")
-                
-                # Market insights
-                st.markdown("""
-                <div class="alert alert-info" style="margin-top:20px;">
-                    <div style="font-weight:600; margin-bottom:8px;">Industry Insights</div>
-                    <p>The selected industry shows strong growth potential with increasing consumer demand for premium quality products. Market conditions favor businesses with a strong unique selling proposition focused on sustainability and local sourcing.</p>
-                </div>
-                """, unsafe_allow_html=True)
+                st.markdown(market_data.get("answer", "No market data available."))
             
             with location_intelligence:
                 if "locations" in location_data:
