@@ -867,8 +867,101 @@ def main():
                 <p style="color:#64748b;">Understand your competition's strengths and weaknesses to develop effective strategies.</p>
             </div>
             """, unsafe_allow_html=True)
-    
-    # Page footer
+
+
+##########################################################
+import streamlit as st
+import requests
+
+API_URL = "http://localhost:8000"
+
+st.markdown('<div class="section-header">💬 Chat with Industry Experts</div>', unsafe_allow_html=True)
+
+experts = [
+    {
+        "name": "Ben Horowitz",
+        "img": "frontend/images/experts/benhorowitz.jpg",
+        "bio": "Co-founder of Andreessen Horowitz. Veteran entrepreneur and trusted voice in venture capital.",
+        "key": "benhorowitz",
+        "base_info": "You are Ben Horowitz — co-founder of Andreessen Horowitz and one of Silicon Valley’s most respected voices on entrepreneurship, leadership, and culture in high-growth startups. You respond with directness, candor, and personal insight drawn from years of experience building and backing companies. Your tone is authentic, no-nonsense, and occasionally humorous or anecdotal — especially when discussing hard truths of startup life.",
+        "namespace": "a16z"
+    },
+    {
+        "name": "Reed Hastings",
+        "img": "images/experts/reedhastings.jpg",
+        "bio": "Co-founder of Netflix. Thought leader in tech, innovation, and scaling consumer platforms through culture.",
+        "key": "reedhastings",
+        "namespace": "reedhastings"
+    },
+    {
+        "name": "Sam Walton",
+        "img": "images/experts/samwalton.jpg",
+        "bio": "Founder of Walmart. Pioneer of cost leadership, rural expansion, and operational efficiency at massive scale.",
+        "key": "samwalton",
+        "namespace": "samwalton"
+    }
+]
+
+if 'selected_expert' not in st.session_state:
+    st.session_state.selected_expert = None
+if 'chat_history' not in st.session_state:
+    st.session_state.chat_history = []
+
+# Display expert cards
+cols = st.columns(3)
+for i, expert in enumerate(experts):
+    with cols[i]:
+        st.markdown(f"""
+        <div style="text-align:center; padding:20px; background-color:#f8fafc; border-radius:12px; height:100%;">
+            <img src="{expert['img']}" alt="{expert['name']}" style="border-radius:50%; width:100px; height:100px; object-fit:cover; margin-bottom:10px;" />
+            <div style="font-weight:600; font-size:18px;">{expert['name']}</div>
+            <p style="font-size:13px; color:#64748b;">{expert['bio']}</p>
+        """, unsafe_allow_html=True)
+        
+        if st.button("Chat", key=f"chat_{expert['key']}"):
+            st.session_state.selected_expert = expert
+            st.session_state.chat_history = []
+
+        st.markdown("</div>", unsafe_allow_html=True)
+
+# Show chat input box and answer
+if st.session_state.selected_expert:
+    expert = st.session_state.selected_expert
+    st.markdown(f"<hr><h4>🧠 Chat with {expert['name']}</h4>", unsafe_allow_html=True)
+
+    user_question = st.text_input("Ask a question:", key="user_input")
+
+    if user_question:
+        payload = {
+            "expert_key": expert["key"],
+            "namespace": expert["namespace"],
+            "question": user_question,
+            "base_info": expert["base_info"],
+            "model": "gpt-4.o-mini"
+        }
+
+        with st.spinner("Thinking..."):
+            try:
+                res = requests.post(f"{API_URL}/chat_with_expert", json=payload)
+                if res.status_code == 200:
+                    answer = res.json()["answer"]
+                    st.session_state.chat_history.append((user_question, answer))
+                    st.success(answer)
+                else:
+                    st.error(f"❌ {res.status_code}: {res.text}")
+            except Exception as e:
+                st.error(f"API error: {str(e)}")
+
+    # Display past questions and answers
+    if st.session_state.chat_history:
+        st.markdown("### 💬 Chat History")
+        for q, a in st.session_state.chat_history[::-1]:
+            st.markdown(f"**Q:** {q}")
+            st.markdown(f"**A:** {a}")
+            st.markdown("---")
+
+
+    # Footer
     st.markdown("""
     <div class="footer">
         <p>Venture Scope | Business Location Intelligence Platform</p>
