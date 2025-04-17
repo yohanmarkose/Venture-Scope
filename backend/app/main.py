@@ -414,8 +414,6 @@ def market_analysis(query: BusinessQuery):
 @app.post("/location_intelligence", response_model=LocationIntelligenceResponse)
 async def location_intelligence(query: BusinessQuery):
     try:
-        # Format the query for agent processing
-
         # Get industry from the domain and products
         industry = classify_industry(query.industry, query.product)
         
@@ -448,7 +446,6 @@ def question_and_analysis(query: QuestionRequest):
         print(f"Received question: {query.question}")
         print(f"Session ID: {query.session_id}")
         
-        # Process message history if provided
         message_history = []
         if query.message_history:
             print(f"Message history provided with {len(query.message_history)} items")
@@ -457,8 +454,7 @@ def question_and_analysis(query: QuestionRequest):
                     message_history.append(HumanMessage(content=msg.content))
                 elif msg.type == "ai":
                     message_history.append(AIMessage(content=msg.content))
-        
-        # If no history or only has AI messages, add the current question
+
         if not message_history or all(isinstance(msg, AIMessage) for msg in message_history):
             message_history.append(HumanMessage(content=query.question))
             
@@ -477,15 +473,11 @@ def question_and_analysis(query: QuestionRequest):
         
         if session_id not in active_chatbots:
             # Create new chatbot instance with the specific session ID
-            print("Creating new chatbot instance")
             chatbot = create_qa_chatbot(report_data)
-            print("Chatbot instance created")
             chatbot = chatbot.with_config(
                 {"thread": {"configurable": {"session_id": session_id}}}
             )
-            print("Chatbot instance configured")
             active_chatbots[session_id] = (chatbot, report_data)
-            print("Chatbot instance stored")
         else:
             # Get existing chatbot
             chatbot, stored_report_data = active_chatbots[session_id]

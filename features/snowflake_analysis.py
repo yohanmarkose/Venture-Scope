@@ -174,10 +174,4 @@ if __name__ == "__main__":
         print(f"Found {len(fintech_companies)} fintech companies:")
         print(fintech_companies[['COMPANY_NAME', 'SIZE', 'WEBSITE', 'MARKET_CAP', 'PERFORMANCE_SCORE']])
     
-    # Example: Get top performers in California
-    # california_companies = snowflake.get_top_performers_by_region("california", limit=5)
-    # if california_companies is not None:
-    #     print(f"Top 5 performers in California:")
-    #     print(california_companies[['COMPANY_NAME', 'INDUSTRY', 'PERFORMANCE_SCORE']])
-    
     sn_obj.disconnect()
