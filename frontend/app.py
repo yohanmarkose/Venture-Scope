@@ -633,8 +633,8 @@ def main():
             
             # Call the API
             api_calls = [
-                ("market_analysis", "market_analysis", data)
-                # ("location_intelligence", "location_intelligence", data)
+                ("market_analysis", "market_analysis", data),
+                ("location_intelligence", "location_intelligence", data)
 
             ]
             
@@ -658,7 +658,7 @@ def main():
     if st.session_state.submitted and st.session_state.api_results:
         
         market_data = st.session_state.api_results.get("market_analysis", {})
-        # location_data = st.session_state.api_results.get("location_intelligence", {})
+        location_data = st.session_state.api_results.get("location_intelligence", {})
         
         # if "error" in location_data:
         #     st.error(f"Error retrieving data: {location_data['error']}")
@@ -687,7 +687,8 @@ def main():
                 fig = go.Figure(json.loads(market_data.get("plot")))
                 st.header(market_data.get("industry").title())
                 # Download the markdown
-                st.markdown(f"[Download Market Analysis]({market_data.get("file_path")})")
+                print()
+                st.markdown(f"[Download Market Analysis]({market_data.get('file_path')})")
                 
                 st.plotly_chart(fig)
                 st.markdown(market_data.get("answer"))
@@ -730,14 +731,14 @@ def main():
                     
             with location_intelligence:
                 st.markdown('<div class="section-header">Q & A</div>', unsafe_allow_html=True)
-                # if "locations" in location_data:
-                #     display_locations(location_data.get("locations", []))
-                # else:
-                #     st.warning("No location data available.")
-                # if "competitors" in location_data:
-                #     display_competitors(location_data.get("competitors", []))
-                # else:
-                #     st.warning("No competitor data available.")
+                if "locations" in location_data:
+                    display_locations(location_data.get("locations", []))
+                else:
+                    st.warning("No location data available.")
+                if "competitors" in location_data:
+                    display_competitors(location_data.get("competitors", []))
+                else:
+                    st.warning("No competitor data available.")
             
             with chat_with_experience:
                 st.markdown('<div class="section-header">💬 Chat with Industry Experts - Ask them about their stories</div>', unsafe_allow_html=True)
