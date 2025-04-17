@@ -779,8 +779,8 @@ def main():
 
                 if 'selected_expert' not in st.session_state:
                     st.session_state.selected_expert = None
-                if 'chat_history' not in st.session_state:
-                    st.session_state.chat_history = []
+                if 'expertchat_history' not in st.session_state:
+                    st.session_state.expertchat_history = []
 
                 # Display expert cards
                 cols = st.columns(4)
@@ -802,7 +802,7 @@ def main():
                         # Insert the Streamlit button
                         if st.button("Chat", key=f"chat_{expert['key']}", use_container_width=True):
                             st.session_state.selected_expert = expert
-                            st.session_state.chat_history = []
+                            st.session_state.expertchat_history = []
 
                         st.markdown("</div>", unsafe_allow_html=True)
 
@@ -811,13 +811,13 @@ def main():
                     expert = st.session_state.selected_expert
                     st.markdown(f"<hr><h4>🧠 Chat with {expert['name']}</h4>", unsafe_allow_html=True)
 
-                    user_question = st.text_input("Ask a question:", key="user_input")
+                    expert_question = st.text_input("Ask a question:", key="user_input")
 
-                    if user_question:
+                    if expert_question:
                         payload = {
                             "expert_key": expert["key"],
                             "namespace": expert["namespace"],
-                            "question": user_question,
+                            "question": expert_question,
                             "base_info": expert["base_info"],
                             "model": "gpt-4.o-mini"
                         }
@@ -827,7 +827,7 @@ def main():
                                 res = requests.post(f"{API_URL}/chat_with_expert", json=payload)
                                 if res.status_code == 200:
                                     answer = res.json()["answer"]
-                                    st.session_state.chat_history.append((user_question, answer))
+                                    st.session_state.expertchat_history.append((expert_question, answer))
                                     st.success(answer)
                                 else:
                                     st.error(f"❌ {res.status_code}: {res.text}")
@@ -835,9 +835,9 @@ def main():
                                 st.error(f"API error: {str(e)}")
 
                     # Show chat history
-                    if st.session_state.chat_history:
+                    if st.session_state.expertchat_history:
                         st.markdown("### 💬 Chat History")
-                        for q, a in st.session_state.chat_history[::-1]:
+                        for q, a in st.session_state.expertchat_history[::-1]:
                             st.markdown(f"**Q:** {q}")
                             st.markdown(f"**A:** {a}")
                             st.markdown("---")

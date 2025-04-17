@@ -147,7 +147,7 @@ def agent_should_continue(state: ChatbotState) -> bool:
 def run_agent(state: ChatbotState, chatbot):
     """Run the chatbot agent to process the user's message"""
     print("Running chatbot agent")
-    out = chatbot.invoke(state)
+    out = chatbot.invoke(state, config={"recursion_limit": 70})
     
     # Check if the response contains tool calls
     if hasattr(out, 'tool_calls') and len(out.tool_calls) > 0:
