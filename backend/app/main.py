@@ -1,6 +1,6 @@
 import io, os, time, base64, asyncio, json
 from io import BytesIO
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException , APIRouter
 from pydantic import BaseModel, Field
 from typing import List, Dict, Any, Optional, Tuple, Union
 from features.mcp.google_maps.location_intelligence import start_location_intelligence
@@ -20,6 +20,11 @@ from features.qa_agent import create_qa_chatbot, handle_user_message_with_histor
 import warnings
 from features.summary_agent import run_summary_agent
 from services.s3 import S3FileManager
+
+from langchain.agents import Tool, initialize_agent
+from langchain_community.chat_models import ChatOpenAI
+from services.vectordb_expertchat import query_pinecone
+from tavily import TavilyClient
 
 load_dotenv()
 
@@ -561,102 +566,95 @@ def final_analysis(query: SummaryRecommendation):
         print(f"Error in summary recommendations: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error generating recommendations: {str(e)}")
     
-from fastapi import HTTPException, APIRouter
-from pydantic import BaseModel
-import os
-from langchain.agents import Tool, initialize_agent
-from langchain_community.chat_models import ChatOpenAI
-from services.vectordb_expertchat import query_pinecone
-from tavily import TavilyClient
 
-router = APIRouter()
+# router = APIRouter()
 
-# ------------------ Models ------------------ #
-class ExpertChatRequest(BaseModel):
-    expert_key: str
-    namespace: str
-    question: str
-    base_info: str
-    model: str = "gpt-4o-mini"
+# # ------------------ Models ------------------ #
+# class ExpertChatRequest(BaseModel):
+#     expert_key: str
+#     namespace: str
+#     question: str
+#     base_info: str
+#     model: str = "gpt-4o-mini"
 
-# ------------------ Init Clients ------------------ #
-llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
-tavily = TavilyClient(api_key=os.getenv("TAVILY_API_KEY"))
+# # ------------------ Init Clients ------------------ #
+# llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
+# tavily = TavilyClient(api_key=os.getenv("TAVILY_API_KEY"))
 
-# ------------------ Tool Functions ------------------ #
-def make_pinecone_tool(namespace):
-    def tool_func(query: str):
-        matches = query_pinecone(query, namespace=namespace, top_k=5)
-        return "\n\n".join([m["metadata"]["text"] for m in matches if "text" in m.get("metadata", {})])
-    return tool_func
+# # ------------------ Tool Functions ------------------ #
+# def make_pinecone_tool(namespace):
+#     def tool_func(query: str):
+#         matches = query_pinecone(query, namespace=namespace, top_k=5)
+#         return "\n\n".join([m["metadata"]["text"] for m in matches if "text" in m.get("metadata", {})])
+#     return tool_func
 
-def make_web_search_tool_for_expert(expert_key: str):
-    if expert_key == "benhorowitz":
-        return lambda query: strict_domain_web_search(query, domain="a16z.com")
-    else:
-        return None  
+# def make_web_search_tool_for_expert(expert_key: str):
+#     if expert_key == "benhorowitz":
+#         return lambda query: strict_domain_web_search(query, domain="a16z.com")
+#     else:
+#         return None  
 
-def strict_domain_web_search(query: str, domain: str):
-    result = tavily.search(query=query)
+# def strict_domain_web_search(query: str, domain: str):
+#     result = tavily.search(query=query)
     
-    def is_preferred(res):
-        return domain in res.get("url", "")
+#     def is_preferred(res):
+#         return domain in res.get("url", "")
 
-    if isinstance(result, dict) and "results" in result:
-        filtered = list(filter(is_preferred, result["results"]))
-        if filtered:
-            return filtered[0]["content"]
-        else:
-            return f"No relevant results found from {domain}."
-    return "⚠️ Unexpected web search result format."
+#     if isinstance(result, dict) and "results" in result:
+#         filtered = list(filter(is_preferred, result["results"]))
+#         if filtered:
+#             return filtered[0]["content"]
+#         else:
+#             return f"No relevant results found from {domain}."
+#     return "⚠️ Unexpected web search result format."
 
-# ------------------ Endpoint ------------------ #
-@router.post("/chat_with_expert")
-def chat_with_expert(request: ExpertChatRequest):
-    try:
-        expert_name = request.expert_key.replace("_", " ").title()
-        base_info = request.base_info or f"You are {expert_name}, an industry expert."
+# # ------------------ Endpoint ------------------ #
+# @router.post("/chat_with_expert")
+# def chat_with_expert(request: ExpertChatRequest):
+#     try:
+#         expert_name = request.expert_key.replace("_", " ").title()
+#         base_info = request.base_info or f"You are {expert_name}, an industry expert."
 
-        tools = [
-            Tool(name="book_knowledge", func=make_pinecone_tool(request.namespace),
-                 description="Use for questions based on the expert's published work."),
-            Tool(name="web_search", func=make_web_search_tool_for_expert(request.expert_key),
-                 description="Use for questions requiring real-time information or latest blogs from 2025")
-        ]
+#         tools = [
+#             Tool(name="book_knowledge", func=make_pinecone_tool(request.namespace),
+#                  description="Use for questions based on the expert's published work."),
+#             Tool(name="web_search", func=make_web_search_tool_for_expert(request.expert_key),
+#                  description="Use for questions requiring real-time information or latest blogs from 2025")
+#         ]
 
-        agent = initialize_agent(tools=tools, llm=llm, agent="chat-conversational-react-description", verbose=True ,handle_parsing_errors=True)
+#         agent = initialize_agent(tools=tools, llm=llm, agent="chat-conversational-react-description", verbose=True ,handle_parsing_errors=True)
 
-        final_prompt = f"""
-        You are {expert_name}. {base_info}
-        You have access to two sources of information:
-        - book_knowledge: your published writings, talks, and expert-authored material
-        - web_search: Your real time or latest blogs and articles
+#         final_prompt = f"""
+#         You are {expert_name}. {base_info}
+#         You have access to two sources of information:
+#         - book_knowledge: your published writings, talks, and expert-authored material
+#         - web_search: Your real time or latest blogs and articles
 
-        Guidelines:
-        - Use either book_knowledge or web_search not more than once — choose based on the complexity of the question.
-        - All the responses generated should be in the first person
-        - If the question is simple or based on personal experience, answer it directly.
-        - Speak in a candid, wise, and occasionally humorous tone. Use examples, stories, and leadership lessons.
-        - If the question is off-topic or irrelevant, respond with: "Sorry, I can’t help with that."
+#         Guidelines:
+#         - Use either book_knowledge or web_search not more than once — choose based on the complexity of the question.
+#         - All the responses generated should be in the first person
+#         - If the question is simple or based on personal experience, answer it directly.
+#         - Speak in a candid, wise, and occasionally humorous tone. Use examples, stories, and leadership lessons.
+#         - If the question is off-topic or irrelevant, respond with: "Sorry, I can’t help with that."
 
-        Question: {request.question}
-        """
+#         Question: {request.question}
+#         """
 
-        response = agent.invoke({
-            "input": final_prompt,
-            "chat_history": []  # optionally populate from request.chat_history
-        })
+#         response = agent.invoke({
+#             "input": final_prompt,
+#             "chat_history": []  # optionally populate from request.chat_history
+#         })
 
-        return {
-            "answer": response["output"],
-            "trace": response.get("intermediate_steps", [])
-        }
+#         return {
+#             "answer": response["output"],
+#             "trace": response.get("intermediate_steps", [])
+#         }
 
 
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Agent error: {str(e)}")
+#     except Exception as e:
+#         import traceback
+#         traceback.print_exc()
+#         raise HTTPException(status_code=500, detail=f"Agent error: {str(e)}")
 
-# ------------------ Register Router ------------------ #
-app.include_router(router)
+# # ------------------ Register Router ------------------ #
+# app.include_router(router)
