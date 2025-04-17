@@ -55,10 +55,3 @@ with DAG(
 
     input_files = get_input_files()
     process_single_pdf.expand(file_info=input_files)
-
-# {
-#   "base_path": "vc_reports",
-#   "pdf_files": [
-#     "Q4-2024-PitchBook-NVCA-Venture-Monitor-Summary-DealActivity.pdf"
-#   ]
-# }
