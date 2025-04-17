@@ -18,11 +18,14 @@ from langchain_core.messages import HumanMessage, AIMessage
 import uuid
 from features.qa_agent import create_qa_chatbot, handle_user_message_with_history
 import warnings
+from features.summary_agent import run_summary_agent
+from services.s3 import S3FileManager
 
 load_dotenv()
 
 app = FastAPI()
 
+AWS_BUCKET_NAME = os.getenv("AWS_BUCKET_NAME")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 
@@ -133,6 +136,15 @@ class QuestionRequest(BaseModel):
     model_config = {
         "populate_by_name": True
     }
+
+class SummaryRecommendation(BaseModel):
+    industry: str
+    product: List[str]
+    location_city: List[str]
+    budget: List[float]
+    size: str
+    unique_selling_proposition: Optional[str] = None
+    session_id: Optional[str] = None
 
 class Competitor(BaseModel):
     name: str
@@ -258,6 +270,50 @@ def convert_report_to_markdown(report_dict):
 """ 
     return markdown_report
 
+def convert_summary_report_to_markdown(report_dict):
+    try:
+        # Parse the report if it's a string
+        if isinstance(report_dict, str):
+            report_dict = json.loads(report_dict)
+        
+        markdown = []
+        
+        # Add Executive Summary
+        markdown.append("# Executive Summary")
+        markdown.append(report_dict.get("executive_summary", ""))
+        markdown.append("")
+        
+        # Add Market Analysis Insights
+        markdown.append("## Market Analysis Insights")
+        markdown.append(report_dict.get("market_analysis_insights", ""))
+        markdown.append("")
+        
+        # Add Location Recommendations
+        markdown.append("## Location Recommendations")
+        markdown.append(report_dict.get("location_recommendations", ""))
+        markdown.append("")
+        
+        # Add Action Steps
+        markdown.append("## Action Steps")
+        markdown.append(report_dict.get("action_steps", ""))
+        markdown.append("")
+        
+        # Add Risk Assessment
+        markdown.append("## Risk Assessment")
+        markdown.append(report_dict.get("risk_assessment", ""))
+        markdown.append("")
+        
+        # Add Resource Recommendations
+        markdown.append("## Resource Recommendations")
+        markdown.append(report_dict.get("resource_recommendations", ""))
+        
+        return "\n".join(markdown)
+    except Exception as e:
+        print(f"Error converting report to markdown: {str(e)}")
+        return f"Error formatting report: {str(e)}"
+    
+
+
 def get_graph(industry):
     # ─── Fetch & prep ────────────────────────────────────────────────────────
     sf = SnowflakeConnector(industry)
@@ -316,25 +372,29 @@ def market_analysis(query: BusinessQuery):
             "size": query.size,
             "unique_selling_proposition": query.unique_selling_proposition or ""
         }
-        # size_category = formatted_query["size"]
-        size_category = None
+        size_category = formatted_query["size"]
+        print("Size category selected is:", size_category)
         
-        # Get industry from the domain and products
         industry = classify_industry(formatted_query["industry"], formatted_query["product"])
         print("Industry selected is:", industry)
 
-        print("\n\n got till before plot\n\n")
         fig_obj = get_graph(industry)
-        print("\n\n got till after plot\n\n")
+
         runnable = run_agents(industry, size_category)
         out = runnable.invoke({ 
             "chat_history": [],
             "industry": industry,
             "size_category": size_category
         })
-        print(out)
+
         answer = out["intermediate_steps"][-1].tool_input
         markdown_report = convert_report_to_markdown(answer)
+
+        base_path = base_path = f"users/temp/"
+        s3_obj = S3FileManager(AWS_BUCKET_NAME, base_path)
+        file = f"{base_path}market_analysis.md"
+        s3_obj.upload_file(AWS_BUCKET_NAME, file, markdown_report)
+        # content = s3_obj.load_s3_file_content(file)
 
         print("Answer:\n", markdown_report)
         
@@ -443,4 +503,57 @@ def question_and_analysis(query: QuestionRequest):
         print(f"Error in question_and_analysis: {str(e)}")
         print(traceback.format_exc())
         raise HTTPException(status_code=500, detail=f"Error answering question: {str(e)}")
+    
+
+@app.post("/summary_recommendations")
+def final_analysis(query: SummaryRecommendation):
+    try:
+        formatted_query = {
+            "industry": query.industry,
+            "product": ", ".join(query.product),
+            "location_city": ", ".join(query.location_city),
+            "budget": f"{query.budget[0]} - {query.budget[1]}",
+            "size": query.size,
+            "unique_selling_proposition": query.unique_selling_proposition or ""
+        }
+
+        base_path = base_path = f"users/temp/"
+        s3_obj = S3FileManager(AWS_BUCKET_NAME, base_path)
+        file = f"{base_path}market_analysis.md"
+
+        market_analysis_output = s3_obj.load_s3_file_content(file)
+
+        location_intelligence_output = ", ".join(query.location_city)
+
+        industry = classify_industry(formatted_query["industry"], formatted_query["product"])
+        print("Industry selected is:", industry)
+
+        runnable = run_summary_agent(industry, formatted_query["location_city"], formatted_query["budget"],
+                     market_analysis_output, location_intelligence_output)
+        out = runnable.invoke({ 
+            "chat_history": [],
+            "industry": industry,
+            "location": formatted_query["location_city"],
+            "budget_level": formatted_query["budget"],
+            "market_analysis_output": market_analysis_output,
+            "location_intelligence_output": location_intelligence_output,
+            "intermediate_steps": []
+        }, config={"recursion_limit": 70}) 
+        
+        # print("Raw output:", out)
+        answer = out["intermediate_steps"][-1].tool_input
+        markdown_report = convert_summary_report_to_markdown(answer)
+        
+        print("Final recommendations:\n", markdown_report)
+        
+        return {
+            "answer": markdown_report,
+            "industry": industry,
+            "location": formatted_query["location_city"],
+            "budget_level": formatted_query["budget"]
+        }
+    
+    except Exception as e:
+        print(f"Error in summary recommendations: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error generating recommendations: {str(e)}")
     

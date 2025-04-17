@@ -222,7 +222,7 @@ def init_research_agent(industry, size_category):
 
     ## Designing Agent Features and Prompt ##
     system_prompt = f"""You are a Market Analysis agent specializing in detailed industry research.
-    Given the industry input '{industry}', follow this EXACT workflow:
+    Given the industry input '{industry}' and size category {size_category}, follow this EXACT workflow:
 
     1. FIRST, use the snowflake_query tool to fetch the top 5 companies in this industry.
     2. SECOND, use the fetch_web_content tool with the website URLs from step 1.

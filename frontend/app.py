@@ -600,9 +600,10 @@ def main():
     # Business details
     st.sidebar.markdown("<div style='font-weight:600; font-size:18px; margin-top:24px; margin-bottom:16px;'>Business Details</div>", unsafe_allow_html=True)
     
+    size_dict = {"Small": "small", "Medium": "medium", "Large": "large"}
     size = st.sidebar.selectbox("What is the size of business?", 
                              ["Small", "Medium", "Large"])
-    size = "small" if size == "Small" else "medium" if size == "large" else "Large"
+    size = size_dict.get(size, "large")
     additional_details = st.sidebar.text_area("What is your Unique Selling Proposition?")
     
     # Submit button
@@ -672,10 +673,12 @@ def main():
             """, unsafe_allow_html=True)
             
             # Display tabs that match the mockups
-            market_analysis, location_intelligence, qa_tab = st.tabs([
+            market_analysis, location_intelligence, summary_recommendations, qa_tab, chat_with_experiance = st.tabs([
                 "📊 Market Analysis", 
-                "🗺️ Location Intelligence", 
-                "⁉️ Q & A"
+                "🗺️ Location Intelligence",
+                "📋 Summary & Recommendations",
+                "⁉️ Q & A",
+                "💬 Chat with Experience"
             ])
             
             with market_analysis:
@@ -684,7 +687,43 @@ def main():
                 st.header(market_data.get("industry").title())
                 st.plotly_chart(fig)
                 st.markdown(market_data.get("answer"))
-            
+
+            with summary_recommendations:
+                st.markdown('<div class="section-header">Summary & Recommendations</div>', unsafe_allow_html=True)
+                generate_summary = st.button("Generate Summary & Recommendations", type="primary", use_container_width=True)
+                if generate_summary:
+                    with st.spinner("Generating summary and recommendations..."):
+                        try:
+                            # Create data payload - same as what we used for other API calls
+                            data = {
+                                "industry": selected_industry,
+                                "product": st.session_state.products,
+                                "location_city": selected_city,
+                                "budget": list(budget_range),
+                                "size": size,
+                                "unique_selling_proposition": additional_details,
+                                "session_id": st.session_state.chatbot_session_id
+                            }
+                            
+                            # Call the summary recommendations API
+                            response = requests.post(
+                                f"{API_URL}/summary_recommendations",
+                                json=data,
+                                timeout=180
+                            )
+                            
+                            if response.status_code == 200:
+                                summary_data = response.json()
+                                st.markdown(summary_data.get("industry", "").title())
+                                # Display the markdown content
+                                st.markdown(summary_data.get("answer", ""))
+                            else:
+                                st.error(f"Error: {response.status_code} - Could not generate summary recommendations.")
+                        except Exception as e:
+                            st.error(f"Error processing summary recommendations: {str(e)}")
+                            import traceback
+                            st.error(traceback.format_exc())
+                    
             with location_intelligence:
                 pass
                 # if "locations" in location_data:
@@ -695,6 +734,9 @@ def main():
                 #     display_competitors(location_data.get("competitors", []))
                 # else:
                 #     st.warning("No competitor data available.")
+            
+            with chat_with_experiance:
+                pass
 
             with qa_tab:
                 st.markdown('<div class="section-header">Q & A</div>', unsafe_allow_html=True)
@@ -773,6 +815,7 @@ def main():
                             st.error(f"Error processing request: {str(e)}")
                             import traceback
                             st.error(traceback.format_exc())
+                    
             
             # Add a button to start a new analysis
             if st.button("Start New Analysis", type="primary"):

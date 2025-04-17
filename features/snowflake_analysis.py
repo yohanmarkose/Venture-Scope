@@ -107,6 +107,7 @@ class SnowflakeConnector:
         """
         return self.execute_query(query_normal)
     
+    
     def get_top_performers_by_region(self, region, limit=20):
         """Get top performing companies in a specific region"""
         query = f"""
