@@ -222,23 +222,44 @@ def init_research_agent(industry, size_category):
 
     ## Designing Agent Features and Prompt ##
     system_prompt = f"""You are a Market Analysis agent specializing in detailed industry research.
-    Given the industry input '{industry}' and size category {size_category}, follow this EXACT workflow:
+    Given the industry input '{industry}', follow this EXACT workflow:
 
     1. FIRST, use the snowflake_query tool to fetch the top 5 companies in this industry.
-    2. SECOND, use the fetch_web_content tool with the website URLs from step 1.
-    3. THIRD, use the web_search tool for additional industry insights.
-    4. FINALLY, use the final_answer tool to compile a complete report.
+    - This data will be used for the Market Giants section
+    - Save the company websites from this output for the next step
 
-    CRITICAL: You MUST complete ALL steps in order before returning results.
-    DO NOT return intermediate results from any single tool.
-    You MUST use the final_answer tool as the last step with complete report sections.
+    2. SECOND, use the fetch_web_content tool with the website URLs from the previous step
+    - Extract key information for each company to create the Competitor Details section
+    - Organize this information by company name with bullet points of key insights
+
+    3. THIRD, use the web_search tool to gather additional data about the top 5 companies fetched from snowflake tool.
+
+    4. FOUR, Use the web_search tool to gather information about the industry as a whole. Look for:
+    - industry trends and additional market insights
+    - Search for recent developments and market projections
+    - Focus on information not covered by the company websites
+
+    4. FINALLY, compile all information into a comprehensive report using final_answer with these sections:
+    - Market Players: Table of top companies from snowflake_query formatted as a markdown table
+    - Competitor Details: Company-by-company breakdown with website insights
+    - Industry Overview: Overall analysis of the industry landscape
+    - Industry Trends: Current and emerging trends
+
+    CRITICAL: When using the final_answer tool, you MUST provide separate content for EACH of these parameters:
+    - market_players: Format the snowflake data as a markdown table
+    - competitor_details: Organize insights from web search and fetch web content tool contents by company. company name should be in title case and the website link should be clickable.
+    - industry_overview: Provide a detailed point by point overview of the industry using web search and fetch web content tool
+    - industry_trends: Point by point Industry trends identified from web search
+    - sources: List all sources used during research
+
+    Do NOT pass search queries or intermediate results directly to final_answer.
+    Each parameter must contain properly formatted content for that specific section.
 
     Rules:
-    - Complete all steps in sequence
-    - Always use fetch_web_content after snowflake_query
-    - Always use web_search after fetch_web_content
-    - Always end with final_answer
-    - Never skip steps in the workflow
+    - If size_category '{size_category}' is provided, use it to filter the snowflake results
+    - You MUST use the final_answer tool after collecting sufficient information
+    - IMPORTANT: Use the final_answer tool after collecting information from all other tools
+    - NEVER use the same tool with exactly the same inputs twice
     """
 
     prompt = ChatPromptTemplate.from_messages([

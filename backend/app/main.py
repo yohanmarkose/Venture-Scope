@@ -385,7 +385,7 @@ def market_analysis(query: BusinessQuery):
             "chat_history": [],
             "industry": industry,
             "size_category": size_category
-        })
+        }, config={"recursion_limit": 70})
 
         answer = out["intermediate_steps"][-1].tool_input
         markdown_report = convert_report_to_markdown(answer)
@@ -394,6 +394,8 @@ def market_analysis(query: BusinessQuery):
         s3_obj = S3FileManager(AWS_BUCKET_NAME, base_path)
         file = f"{base_path}market_analysis.md"
         s3_obj.upload_file(AWS_BUCKET_NAME, file, markdown_report)
+
+        file_path = f"https://{s3_obj.bucket_name}.s3.amazonaws.com/{file}"
         # content = s3_obj.load_s3_file_content(file)
 
         print("Answer:\n", markdown_report)
@@ -401,7 +403,8 @@ def market_analysis(query: BusinessQuery):
         return {
             "answer": markdown_report,
             "plot": fig_obj.to_json(),
-            "industry": industry
+            "industry": industry,
+            "file_path": file_path
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error answering question: {str(e)}")
