@@ -14,11 +14,20 @@ from dotenv import load_dotenv
 import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
+from langchain_core.messages import HumanMessage, AIMessage
+import uuid
+from features.qa_agent import create_qa_chatbot, handle_user_message_with_history
+import warnings
+from features.summary_agent import run_summary_agent
+from services.s3 import S3FileManager
+
 load_dotenv()
 
 app = FastAPI()
 
+AWS_BUCKET_NAME = os.getenv("AWS_BUCKET_NAME")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+
 
 INDUSTRIES = [
     "accounting",
@@ -85,7 +94,7 @@ state_abbrev = {
     'South Dakota': 'SD', 'Tennessee': 'TN', 'Texas': 'TX', 'Utah': 'UT', 'Vermont': 'VT',
     'Virginia': 'VA', 'Washington': 'WA', 'West Virginia': 'WV', 'Wisconsin': 'WI', 'Wyoming': 'WY'
 }
- 
+
 # Models
 class BusinessQuery(BaseModel):
     industry: str = Field(..., description="The industry sector of the business")
@@ -108,6 +117,34 @@ class BusinessQuery(BaseModel):
             }
         }
     }
+
+class MessageItem(BaseModel):
+    type: str  # "human" or "ai"
+    content: str
+
+class QuestionRequest(BaseModel):
+    question: str
+    industry: str
+    product: List[str]
+    location_city: List[str] = Field(..., alias="location/city")
+    budget: List[float]
+    size: str
+    unique_selling_proposition: Optional[str] = None
+    session_id: Optional[str] = None
+    message_history: Optional[List[MessageItem]] = None
+    
+    model_config = {
+        "populate_by_name": True
+    }
+
+class SummaryRecommendation(BaseModel):
+    industry: str
+    product: List[str]
+    location_city: List[str]
+    budget: List[float]
+    size: str
+    unique_selling_proposition: Optional[str] = None
+    session_id: Optional[str] = None
 
 class Competitor(BaseModel):
     name: str
@@ -206,8 +243,7 @@ def convert_report_to_markdown(report_dict):
             return report_dict
     
     # Extract sections from dictionary with fallbacks for missing sections
-    research_steps = report_dict.get("research_steps", "Research methodology not provided")
-    market_giants = report_dict.get("market_giants", "Market giants data not available")
+    market_players = report_dict.get("market_players", "Market Players data not available")
     competitor_details = report_dict.get("competitor_details", "Competitor details not available")
     industry_overview = report_dict.get("industry_overview", "Industry overview not available")
     industry_trends = report_dict.get("industry_trends", "Industry trends not available")
@@ -217,11 +253,8 @@ def convert_report_to_markdown(report_dict):
     markdown_report = f"""
 # Market Analysis Report
 
-## Research Methodology
-{research_steps}
-
-## Market Giants
-{market_giants}
+## Market Players
+{market_players}
 
 ## Competitor Details
 {competitor_details}
@@ -237,105 +270,93 @@ def convert_report_to_markdown(report_dict):
 """ 
     return markdown_report
 
-def get_graph(industry):
-    print("Starting")
-    snow_obj = SnowflakeConnector(industry)
-    print("Connecting to Snowflake...")
-    snow_obj.connect()
-    print("Connected to Snowflake!")
-    df = snow_obj.get_statewise_count_by_industry(industry)
-    print("Data fetched from Snowflake!")
-    snow_obj.disconnect()
-    df['REGION'] = df['REGION'].str.title()
-    for region in df['REGION'].unique():
-        if region not in state_abbrev:
-            print(f"Warning: '{region}' is not a recognized US state name")
-
-    df['state_code'] = df['REGION'].map(state_abbrev)
-
-    state_totals = df.groupby('REGION')['COUNT'].sum().reset_index()
-    state_totals['state_code'] = state_totals['REGION'].map(state_abbrev)
-
-    size_order = ['1-10', '11-50', '51-200', '201-500', '501-1000', '1001-5000', '5001-10000', '10000+']
-    df['SIZE_CATEGORY'] = pd.Categorical(df['SIZE_CATEGORY'], categories=size_order, ordered=True)
-
-    size_pivot = df.pivot_table(
-        values='COUNT', 
-        index='REGION', 
-        columns='SIZE_CATEGORY',
-        aggfunc='sum',
-        fill_value=0
-    )
-    size_pivot_normalized = size_pivot.div(size_pivot.sum(axis=1), axis=0) * 100
-    size_pivot_normalized['state_code'] = size_pivot_normalized.index.map(state_abbrev)
-    fig = make_subplots(
-        rows=1, cols=1,
-        specs=[[{"type": "choropleth"}]]
-    )
+def convert_summary_report_to_markdown(report_dict):
+    try:
+        # Parse the report if it's a string
+        if isinstance(report_dict, str):
+            report_dict = json.loads(report_dict)
+        
+        markdown = []
+        
+        # Add Executive Summary
+        markdown.append("# Executive Summary")
+        markdown.append(report_dict.get("executive_summary", ""))
+        markdown.append("")
+        
+        # Add Market Analysis Insights
+        markdown.append("## Market Analysis Insights")
+        markdown.append(report_dict.get("market_analysis_insights", ""))
+        markdown.append("")
+        
+        # Add Location Recommendations
+        markdown.append("## Location Recommendations")
+        markdown.append(report_dict.get("location_recommendations", ""))
+        markdown.append("")
+        
+        # Add Action Steps
+        markdown.append("## Action Steps")
+        markdown.append(report_dict.get("action_steps", ""))
+        markdown.append("")
+        
+        # Add Risk Assessment
+        markdown.append("## Risk Assessment")
+        markdown.append(report_dict.get("risk_assessment", ""))
+        markdown.append("")
+        
+        # Add Resource Recommendations
+        markdown.append("## Resource Recommendations")
+        markdown.append(report_dict.get("resource_recommendations", ""))
+        
+        return "\n".join(markdown)
+    except Exception as e:
+        print(f"Error converting report to markdown: {str(e)}")
+        return f"Error formatting report: {str(e)}"
     
-    fig.add_trace(
-        go.Choropleth(
-            locations=state_totals['state_code'],
-            z=state_totals['COUNT'],
-            locationmode='USA-states',
-            colorscale='Viridis',
-            colorbar_title="Total Companies",
-            name=f"Total {industry.title()} Companies",
-            marker_line_color='white',
-            marker_line_width=0.5,
-            hovertemplate='<b>%{location}</b><br>' +
-                            'Total Companies: %{z}<br>' +
-                            '<extra></extra>'
-        ),
-        row=1, col=1
+
+
+def get_graph(industry):
+    # ─── Fetch & prep ────────────────────────────────────────────────────────
+    sf = SnowflakeConnector(industry)
+    sf.connect()
+    df = sf.get_statewise_count_by_industry(industry)
+    sf.disconnect()
+
+    # Title‐case and map to USPS code
+    df['REGION'] = df['REGION'].str.title()
+    unknown = set(df['REGION']) - set(state_abbrev)
+    if unknown:
+        warnings.warn(f"Unrecognized states: {unknown}")
+    df['STATE_CODE'] = df['REGION'].map(state_abbrev)
+
+    # Sum counts per state
+    totals = (
+        df
+        .groupby(['REGION','STATE_CODE'], as_index=False)['COUNT']
+        .sum()
     )
 
-    size_data = []
-    for state in state_totals['REGION']:
-        if state in size_pivot.index:
-            for size_cat in size_order:
-                if size_cat in size_pivot.columns:
-                    value = size_pivot.loc[state, size_cat] if size_cat in size_pivot.columns else 0
-                    pct = size_pivot_normalized.loc[state, size_cat] if size_cat in size_pivot_normalized.columns else 0
-                    
-                    # Add hover data
-                    fig.add_trace(
-                        go.Scatter(
-                            x=[state_abbrev.get(state, "")],
-                            y=[0],
-                            mode='markers',
-                            marker=dict(size=0, color='rgba(0,0,0,0)'),
-                            hoverinfo='text',
-                            hovertemplate=f'<b>{state}</b><br>' +
-                                         f'Size: {size_cat}<br>' +
-                                         f'Count: {value}<br>' +
-                                         f'Percentage: {pct:.1f}%<br>' +
-                                         '<extra></extra>',
-                            showlegend=False
-                        )
-                    )
-    fig.update_layout(
-        title_text=f'US {industry.title()} Industry Distribution by State',
-        title_x=0.5,
-        geo=dict(
-            scope='usa',
-            projection=go.layout.geo.Projection(type='albers usa'),
-            showlakes=True,
-            lakecolor='rgb(255, 255, 255)'
+    # ─── Build choropleth ─────────────────────────────────────────────────────
+    fig = go.Figure(go.Choropleth(
+        locations=totals['STATE_CODE'],
+        z=totals['COUNT'],
+        locationmode='USA-states',
+        colorscale='Viridis',
+        colorbar_title='Total Companies',
+        text=totals['REGION'],             # full state name
+        hovertemplate=(
+            '<b>%{text}</b><br>'
+            'Total Companies: %{z}<extra></extra>'
         ),
-        height=600,
-        width=950,
+        marker_line_color='white',
+        marker_line_width=0.5,
+    ))
+
+    fig.update_layout(
+        title=f"US {industry.title()} Companies by State",
+        title_x=0.5,
+        geo_scope='usa',
+        height=600, width=950,
         margin=dict(l=0, r=0, t=50, b=0),
-        showlegend=False
-    )
-    fig.add_annotation(
-        x=0.5,
-        y=-0.1,
-        xref='paper',
-        yref='paper',
-        text='Hover over states to see size category distribution',
-        showarrow=False,
-        font=dict(size=12)
     )
     return fig
 
@@ -351,25 +372,29 @@ def market_analysis(query: BusinessQuery):
             "size": query.size,
             "unique_selling_proposition": query.unique_selling_proposition or ""
         }
-        # size_category = formatted_query["size"]
-        size_category = None
+        size_category = formatted_query["size"]
+        print("Size category selected is:", size_category)
         
-        # Get industry from the domain and products
         industry = classify_industry(formatted_query["industry"], formatted_query["product"])
         print("Industry selected is:", industry)
 
-        print("\n\n got till before plot\n\n")
         fig_obj = get_graph(industry)
-        print("\n\n got till after plot\n\n")
+
         runnable = run_agents(industry, size_category)
         out = runnable.invoke({ 
             "chat_history": [],
             "industry": industry,
             "size_category": size_category
         })
-        print(out)
+
         answer = out["intermediate_steps"][-1].tool_input
         markdown_report = convert_report_to_markdown(answer)
+
+        base_path = base_path = f"users/temp/"
+        s3_obj = S3FileManager(AWS_BUCKET_NAME, base_path)
+        file = f"{base_path}market_analysis.md"
+        s3_obj.upload_file(AWS_BUCKET_NAME, file, markdown_report)
+        # content = s3_obj.load_s3_file_content(file)
 
         print("Answer:\n", markdown_report)
         
@@ -411,4 +436,124 @@ async def location_intelligence(query: BusinessQuery):
     
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error processing location intelligence: {str(e)}")
+    
+
+active_chatbots = {}
+@app.post("/q_and_a")
+def question_and_analysis(query: QuestionRequest):
+    try:
+        print(f"Received question: {query.question}")
+        print(f"Session ID: {query.session_id}")
+        
+        # Process message history if provided
+        message_history = []
+        if query.message_history:
+            print(f"Message history provided with {len(query.message_history)} items")
+            for msg in query.message_history:
+                if msg.type == "human":
+                    message_history.append(HumanMessage(content=msg.content))
+                elif msg.type == "ai":
+                    message_history.append(AIMessage(content=msg.content))
+        
+        # If no history or only has AI messages, add the current question
+        if not message_history or all(isinstance(msg, AIMessage) for msg in message_history):
+            message_history.append(HumanMessage(content=query.question))
+            
+        # Prepare report data
+        report_data = {
+            "market_analysis": f"{query.industry}, {query.size}",
+            "emerging_trends": query.industry,
+            "location_intelligence": query.location_city,
+            "recommendations": f"{query.industry}, {query.size}, {query.budget}"
+        }
+        print("Report data:", report_data)
+        
+        # Create or get existing chatbot session
+        session_id = query.session_id or str(uuid.uuid4())
+        print("Session ID:", session_id)
+        
+        if session_id not in active_chatbots:
+            # Create new chatbot instance with the specific session ID
+            print("Creating new chatbot instance")
+            chatbot = create_qa_chatbot(report_data)
+            print("Chatbot instance created")
+            chatbot = chatbot.with_config(
+                {"thread": {"configurable": {"session_id": session_id}}}
+            )
+            print("Chatbot instance configured")
+            active_chatbots[session_id] = (chatbot, report_data)
+            print("Chatbot instance stored")
+        else:
+            # Get existing chatbot
+            chatbot, stored_report_data = active_chatbots[session_id]
+            # Update report data if needed
+            report_data = {**stored_report_data, **report_data}
+            active_chatbots[session_id] = (chatbot, report_data)
+        
+        # Process the user's question with message history
+        response = handle_user_message_with_history(chatbot, message_history, report_data)
+        print("Response from chatbot:", response)
+        
+        return {
+            "answer": response,
+            "session_id": session_id
+        }
+    except Exception as e:
+        import traceback
+        print(f"Error in question_and_analysis: {str(e)}")
+        print(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"Error answering question: {str(e)}")
+    
+
+@app.post("/summary_recommendations")
+def final_analysis(query: SummaryRecommendation):
+    try:
+        formatted_query = {
+            "industry": query.industry,
+            "product": ", ".join(query.product),
+            "location_city": ", ".join(query.location_city),
+            "budget": f"{query.budget[0]} - {query.budget[1]}",
+            "size": query.size,
+            "unique_selling_proposition": query.unique_selling_proposition or ""
+        }
+
+        base_path = base_path = f"users/temp/"
+        s3_obj = S3FileManager(AWS_BUCKET_NAME, base_path)
+        file = f"{base_path}market_analysis.md"
+
+        market_analysis_output = s3_obj.load_s3_file_content(file)
+
+        location_intelligence_output = ", ".join(query.location_city)
+
+        industry = classify_industry(formatted_query["industry"], formatted_query["product"])
+        print("Industry selected is:", industry)
+
+        runnable = run_summary_agent(industry, formatted_query["location_city"], formatted_query["budget"],
+                     market_analysis_output, location_intelligence_output)
+        out = runnable.invoke({ 
+            "chat_history": [],
+            "industry": industry,
+            "location": formatted_query["location_city"],
+            "budget_level": formatted_query["budget"],
+            "market_analysis_output": market_analysis_output,
+            "location_intelligence_output": location_intelligence_output,
+            "intermediate_steps": []
+        }, config={"recursion_limit": 70}) 
+        
+        # print("Raw output:", out)
+        answer = out["intermediate_steps"][-1].tool_input
+        markdown_report = convert_summary_report_to_markdown(answer)
+        
+        print("Final recommendations:\n", markdown_report)
+        
+        return {
+            "answer": markdown_report,
+            "industry": industry,
+            "location": formatted_query["location_city"],
+            "budget_level": formatted_query["budget"]
+        }
+    
+    except Exception as e:
+        print(f"Error in summary recommendations: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error generating recommendations: {str(e)}")
     
