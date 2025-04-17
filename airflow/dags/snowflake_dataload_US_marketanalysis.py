@@ -104,8 +104,73 @@ with DAG(
 
         create_snowflake_table >> snowflake_stage >> snowflake_format >> load_to_snowflake
 
+    
+    with TaskGroup("snowflake_analytics") as snowflake_analytics:
+
+        # 1. Fuzzy match UDF
+        snowflake_function = SnowflakeOperator(
+            task_id='snowflake_fuzzy_function',
+            snowflake_conn_id='snowflake_default',
+         sql=r"""
+CREATE OR REPLACE FUNCTION FUZZY_SCORE(NAME_A STRING, NAME_B STRING)
+RETURNS FLOAT
+LANGUAGE PYTHON
+RUNTIME_VERSION = '3.8'
+PACKAGES = ('rapidfuzz')
+HANDLER = 'handler_func'
+AS
+$$
+from rapidfuzz import fuzz
+
+def handler_func(str1, str2):
+    return fuzz.partial_ratio(str1, str2)
+$$;"""
+        )
+
+    # 2. Fuzzy join with ticker info
+    snowflake_large_cmp = SnowflakeOperator(
+        task_id='snowflake_large_cmp',
+        snowflake_conn_id='snowflake_default',
+        sql="""
+            USE ROLE ACCOUNTADMIN;
+            ALTER WAREHOUSE DBT_WH SET WAREHOUSE_SIZE = LARGE;
+            USE ROLE FIN_ROLE;
+            USE WAREHOUSE DBT_WH;
+            USE SCHEMA OPPORTUNITY_ANALYSIS.MARKET_ANALYSIS;
+
+            CREATE OR REPLACE TABLE opportunity_analysis.market_analysis.large_companies_with_ticker AS
+            WITH fuzzy_matches AS (
+                SELECT
+                    M.COMPANY_NAME,
+                    T.COMPANY_NAME AS TICKER_COMPANY_NAME,
+                    T.TICKER,
+                    FUZZY_SCORE(LOWER(M.COMPANY_NAME), LOWER(T.COMPANY_NAME)) AS SCORE,
+                    SPLIT_PART(TRIM(LOWER(M.COMPANY_NAME)), ' ', 1) AS FIRST_WORD,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY M.COMPANY_NAME 
+                        ORDER BY FUZZY_SCORE(LOWER(M.COMPANY_NAME), LOWER(T.COMPANY_NAME)) DESC
+                    ) AS rn
+                FROM opportunity_analysis.market_analysis.large_companies M
+                CROSS JOIN TICKERS T
+                WHERE 
+                    FUZZY_SCORE(LOWER(M.COMPANY_NAME), LOWER(T.COMPANY_NAME)) >= 85
+                    AND POSITION(SPLIT_PART(TRIM(LOWER(M.COMPANY_NAME)), ' ', 1) IN LOWER(T.COMPANY_NAME)) > 0
+            )
+            SELECT
+                M.*,
+                fm.TICKER AS T_SYMBOL
+            FROM opportunity_analysis.market_analysis.large_companies M
+            LEFT JOIN fuzzy_matches fm
+                ON M.COMPANY_NAME = fm.COMPANY_NAME AND fm.rn = 1
+            ORDER BY M.COMPANY_NAME;
+        """
+    )
+
+    # DAG flow inside the TaskGroup
+    snowflake_function >> snowflake_large_cmp
+
     # End task
     end = EmptyOperator(task_id='end')   
 
-    # DAG execution flow
-    start >> scraping_cmp_ticker_file >> upload_to_s3 >> snowflake_group >> end
+    # DAG execution flow        
+    start >> scraping_cmp_ticker_file >> upload_to_s3 >> snowflake_group >> snowflake_analytics >> end
