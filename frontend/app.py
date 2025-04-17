@@ -685,6 +685,9 @@ def main():
                 st.markdown('<div class="section-header">Market Overview</div>', unsafe_allow_html=True)
                 fig = go.Figure(json.loads(market_data.get("plot")))
                 st.header(market_data.get("industry").title())
+                # Download the markdown
+                st.markdown(f"[Download Market Analysis]({market_data.get("file_path")})")
+                
                 st.plotly_chart(fig)
                 st.markdown(market_data.get("answer"))
 
@@ -750,14 +753,14 @@ def main():
                     for chat in st.session_state.chat_history_display:
                         if chat["role"] == "user":
                             st.markdown(f"""
-                            <div class="chat-message user-message">
+                            <div class="chat-message user-message" style="background-color: #FFE4C4; padding: 10px; border-radius: 5px; margin-bottom: 10px; color: #000000;">
                                 <div><strong>You:</strong></div>
                                 <div>{chat["content"]}</div>
                             </div>
                             """, unsafe_allow_html=True)
                         else:
                             st.markdown(f"""
-                            <div class="chat-message bot-message">
+                            <div class="chat-message bot-message" style="background-color: #F5F5DC; padding: 10px; border-radius: 5px; margin-bottom: 10px; color: #000000;">
                                 <div><strong>Assistant:</strong></div>
                                 <div>{chat["content"]}</div>
                             </div>

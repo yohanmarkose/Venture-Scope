@@ -10,6 +10,7 @@ from langchain_core.tools import tool
 from langchain_openai import ChatOpenAI
 from functools import partial
 
+
 from tavily import TavilyClient
 
 import os
@@ -206,22 +207,15 @@ def run_tool(state: ChatbotState):
 def router(state: ChatbotState):
     """Router function to determine the next node in the graph"""
     try:
-        # If there are no intermediate steps, end the graph execution
         if len(state["intermediate_steps"]) == 0:
             return END
-        
-        # Get the last action
         last_action = state["intermediate_steps"][-1]
-        
-        # If the action log is "TBD", route to the appropriate tool
         if last_action.log == "TBD":
             return last_action.tool
         else:
-            # If the action has been completed, route back to the agent
             return "agent"
     except Exception as e:
         print(f"Error in router: {str(e)}")
-        # Default to END in case of error
         return END
 
 def create_chatbot_graph(chatbot_agent):
