@@ -687,7 +687,7 @@ def main():
             with market_analysis:
                 st.markdown('<div class="section-header">Market Overview</div>', unsafe_allow_html=True)
                 fig = go.Figure(json.loads(market_data.get("plot")))
-                st.header(f"Market Analysis For {market_data.get('industry', '').title()} Industry")
+                st.header(f"Market Analysis For {market_data.get('industry', '').subtitle()} Industry")
                 # Download the markdown
                 st.markdown(f"[Download Market Analysis]({market_data.get('file_path')})")
                 
@@ -807,8 +807,7 @@ def main():
 
 
             with qa_tab:
-                st.markdown('<div class="section-header">Q & A</div>', unsafe_allow_html=True)
-                
+                st.markdown('<div class="section-header">Q & A</div>', unsafe_allow_html=True)                
                 st.markdown("Ask questions about your business analysis and get personalized answers based on the generated reports.")
 
                 chat_container = st.container()
