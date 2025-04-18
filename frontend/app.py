@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-import time
+import time, os
 import requests
 import json
 import asyncio
@@ -10,13 +10,17 @@ import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime
 import uuid
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # Set page configuration
 st.set_page_config(
     page_title="Venture Scope | Business Location Intelligence",
     page_icon="🌎",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="expanded",
+    theme="light"
 )
 
 # Custom CSS for styling to match mockups
@@ -181,7 +185,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # API endpoint
-API_URL = "http://localhost:8000"
+API_URL = f"{os.getenv('API_URL', 'http://localhost:8080')}"
 
 @st.cache_data
 def load_cities():
@@ -728,7 +732,6 @@ def main():
                             st.error(traceback.format_exc())
                     
             with location_intelligence:
-                st.markdown('<div class="section-header">Q & A</div>', unsafe_allow_html=True)
                 if "locations" in location_data:
                     display_locations(location_data.get("locations", []))
                 else:
@@ -907,8 +910,10 @@ def main():
                             st.error(f"Error processing request: {str(e)}")
                             import traceback
                             st.error(traceback.format_exc())
-
-            if st.button("Start New Analysis", type="primary"):
+                    
+            
+            # Add a button to start a new analysis
+            if st.button("Start New Analysis", type="primary", use_container_width=True):
                 st.session_state.submitted = False
                 st.session_state.api_results = None
                 st.session_state.products = []
