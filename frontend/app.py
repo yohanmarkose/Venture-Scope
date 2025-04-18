@@ -686,7 +686,7 @@ def main():
                 fig = go.Figure(json.loads(market_data.get("plot")))
                 st.header(market_data.get("industry").title())
                 # Download the markdown
-                st.markdown(f"[Download Market Analysis]({market_data.get("file_path")})")
+                st.markdown(f"[Download Market Analysis]({market_data.get('file_path')})")
                 
                 st.plotly_chart(fig)
                 st.markdown(market_data.get("answer"))
@@ -717,7 +717,7 @@ def main():
                             
                             if response.status_code == 200:
                                 summary_data = response.json()
-                                st.markdown(summary_data.get("industry", "").title())
+                                st.markdown(f"Market Analysis For {summary_data.get('industry', '').title()} Industry")
                                 # Display the markdown content
                                 st.markdown(summary_data.get("answer", ""))
                             else:
@@ -826,6 +826,7 @@ def main():
                 st.session_state.api_results = None
                 st.session_state.products = []
                 st.session_state.chat_history_display = []
+                message_history = []
                 st.rerun()
     
     # Show welcome screen when not submitted

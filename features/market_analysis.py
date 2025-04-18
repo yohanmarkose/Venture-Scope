@@ -37,21 +37,6 @@ class AgentState(TypedDict):
     intermediate_steps: Annotated[list[tuple[AgentAction, str]], operator.add]
     industry: Optional[str]
     size_category: Optional[str]
-    
-
-@tool("vector_search")
-def vector_search(query: str):
-    """
-    Searches for the most relevant chunks  in the Pinecone index based on the query.
-    """
-    pass
-    # print("Reached Vector search 1")
-    # top_k = 10
-    # chunks = query_pinecone(query, top_k, year = year, quarter = quarter)
-    # contexts = "\n---\n".join(
-    #     {chr(10).join([f'Chunk {i+1}: {chunk}' for i, chunk in enumerate(chunks)])}
-    # )
-    # return contexts
 
 
 @tool("web_search")
@@ -67,8 +52,22 @@ def web_search(query: str) -> str:
         JSON string containing search results.
     """
     try:
-        response = tavily_client.search(query=query)
-        return response
+        response = tavily_client.search(query=query, limit=5)
+        output_string = ""
+        if 'results' in response:
+            for i, result in enumerate(response['results']):
+                # Extract the required fields
+                title = result.get('title', '')
+                url = result.get('url', '')
+                content = result.get('content', '')
+                
+                # Format each result and add to the output string
+                output_string += f'Title: {title} \n URL: {url} \n Content: {content}'
+                
+                # Add a separator between results (except after the last one)
+                if i < len(response['results']) - 1:
+                    output_string += '\n\n'
+                return output_string
     
     except Exception as e:
         print(f"Error in web search: {str(e)}")
@@ -96,32 +95,6 @@ def fetch_web_content(url: list) -> str:
     except Exception as e:
         print(f"Error in fetch web content: {str(e)}")
         return f"Error in fetch web content"
-
-
-def format_result(result):
-    
-    parts = []
-    
-    if 'data' in result and result['data']:
-        parts.append("DATA:")
-        for i, item in enumerate(result['data'], start=1):
-            parts.append(f"Record {i}:")
-            for key, value in item.items():
-                parts.append(f"  {key.title()}: {value}")
-            parts.append("")  
-    
-    if 'summary' in result:
-        parts.append("SUMMARY:")
-        summary = result['summary'].strip()
-        parts.append(summary)
-        parts.append("")
-    
-    if 'analysis_type' in result:
-        parts.append("Analysis Type:")
-        analysis_type = result['analysis_type'].strip()
-        parts.append(analysis_type)
-    return "\n".join(parts)
-
 
 @tool("snowflake_query")
 def snowflake_query(industry: str = "financial services", size_category: str = None):
@@ -151,9 +124,9 @@ def snowflake_query(industry: str = "financial services", size_category: str = N
     if companies is not None:
         if size_category and size_category.lower() == "large":
             companies = companies[companies['MARKET_CAP'].notnull() & companies['T_SYMBOL'].notnull()]
-            print(companies[['COMPANY_NAME', 'FOUNDED', 'COMPANY_AGE', 'SIZE', 'WEBSITE', 'LINKEDIN_URL', 'REGION', 'MARKET_CAP']].head(5))
+            print(companies[['COMPANY_NAME', 'FOUNDED', 'COMPANY_AGE', 'SIZE', 'WEBSITE', 'LINKEDIN_URL', 'REGION', 'MARKET_CAP', 'YEARLY_RETURN', 'VOLATILITY']].head(5))
 
-            result = companies[['COMPANY_NAME', 'FOUNDED', 'COMPANY_AGE', 'WEBSITE', 'LINKEDIN_URL', 'REGION', 'CURRENT_PRICE', 'MARKET_CAP']]
+            result = companies[['COMPANY_NAME', 'FOUNDED', 'COMPANY_AGE', 'WEBSITE', 'LINKEDIN_URL', 'REGION', 'CURRENT_PRICE', 'MARKET_CAP', 'YEARLY_RETURN', 'VOLATILITY']]
         else:
             print(companies[['COMPANY_NAME', 'FOUNDED', 'COMPANY_AGE', 'SIZE', 'WEBSITE']].head(5))
             result = companies[['COMPANY_NAME', 'FOUNDED', 'COMPANY_AGE', 'WEBSITE', 'LINKEDIN_URL', 'REGION']].head(5)
@@ -173,19 +146,21 @@ def final_answer(
     Returns a comprehensive market analysis report for the specified industry.
     
     Args:
-        market_players: Markdown table of top 5 companies from snowflake_query ('COMPANY_NAME', 'FOUNDED', 'COMPANY AGE', 'WEBSITE', 'LINKEDIN_URL', 'REGION')
+        market_players: Markdown table of top 5 companies from snowflake_query. Display all the columns in the table including linked in column
         - title case the company names and format the table in markdown
         
         competitor_details: With company name as heading (Title case) and corresponding website link, give a detailed breakdown for each company 
-        and key points extracted from website content (From the fetch_web_content tool).(More than 2 sentences for each point)
+        and key points extracted from website content (From the fetch_web_content and web search tool).
         - Give all the details about each companies approach, the products they offer, and their market position from the website and websearch
+        - Give More than 3 sentences for each point if possible
 
-        industry_overview: Point by Point (Bullet points) Overview of the industry based on all collected data. At least 5 points.
+        industry_overview: Point by Point (Bullet points) Overview of the industry based on all collected data. At least 5 points, more if possible.
         - Include key statistics, market size, and growth potential
         - Include tables in markdown format for any relevant data
         - Provide information regarding the industry landscape, including major players and their market share
 
-        industry_trends: Point by Point current and emerging trends in the industry from web search
+        industry_trends: Point by Point current and emerging trends in the industry from web search and fetch web content tool.
+
         - Highlight significant trends, technologies, and innovations shaping the industry.
         - Discuss any regulatory or economic factors influencing the industry
         - Include any recent news or developments that may impact the industry
@@ -234,7 +209,7 @@ def init_research_agent(industry, size_category):
 
     3. THIRD, use the web_search tool to gather additional data about the top 5 companies fetched from snowflake tool.
 
-    4. FOUR, Use the web_search tool to gather information about the industry as a whole. Look for:
+    4. FOUR, Use the web_search tool and fetch_web_content tools to gather information about the industry as a whole. Look for:
     - industry trends and additional market insights
     - Search for recent developments and market projections
     - Focus on information not covered by the company websites
@@ -246,16 +221,18 @@ def init_research_agent(industry, size_category):
     - Industry Trends: Current and emerging trends
 
     CRITICAL: When using the final_answer tool, you MUST provide separate content for EACH of these parameters:
-    - market_players: Format the snowflake data as a markdown table
+    - market_players: Format the snowflake data as a markdown table. With all the table columns that was outputted included.
     - competitor_details: Organize insights from web search and fetch web content tool contents by company. company name should be in title case and the website link should be clickable.
     - industry_overview: Provide a detailed point by point overview of the industry using web search and fetch web content tool
-    - industry_trends: Point by point Industry trends identified from web search
+    - industry_trends: Point by point Industry trends identified from web_search tool and fetch_web_content tools
     - sources: List all sources used during research
 
     Do NOT pass search queries or intermediate results directly to final_answer.
     Each parameter must contain properly formatted content for that specific section.
 
     Rules:
+    - Do Not use the same tool with exactly the same inputs twice
+    - Do not use the same tool more than 10 times
     - If size_category '{size_category}' is provided, use it to filter the snowflake results
     - You MUST use the final_answer tool after collecting sufficient information
     - IMPORTANT: Use the final_answer tool after collecting information from all other tools

@@ -206,6 +206,3 @@ def enhance_company_data_with_yfinance():
 if __name__ == "__main__":
     # Fetch and enhance company data with yfinance metrics
     enhance_company_data_with_yfinance()
-
-
-

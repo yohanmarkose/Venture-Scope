@@ -1,34 +1,30 @@
-from typing import TypedDict, Annotated, Optional, List, Dict, Any
+import operator, json, os
+from typing import TypedDict, Annotated, Optional, List, Dict, Any, Union
 from langchain_core.agents import AgentAction, AgentFinish
-from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
-import operator
-import json
-
+from langchain_core.messages import BaseMessage
+from tavily import TavilyClient
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langgraph.graph import StateGraph, END
 from langchain_core.tools import tool
+from langchain_core.messages import ToolCall, ToolMessage
 from langchain_openai import ChatOpenAI
 from functools import partial
-
-
-from tavily import TavilyClient
-
-import os
+from features.vecotre_db.pinecone_index import query_pinecone
 from dotenv import load_dotenv
-
 load_dotenv()
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+
 TAVILY_API_KEY = os.getenv("TAVILY_API_KEY")
 tavily_client = TavilyClient(TAVILY_API_KEY)
 
-# Creating the Agent State with thread memory
+## Creating the Agent State ##
 class ChatbotState(TypedDict):
-    messages: List[BaseMessage]
-    intermediate_steps: Annotated[List[tuple[AgentAction, str]], operator.add]
+    chat_history: list[BaseMessage]
+    intermediate_steps: Annotated[list[tuple[AgentAction, str]], operator.add]
     report_data: Dict[str, Any]  # To store previously generated report data
+    tool_calls_count: int  # Track number of tool calls in a single turn
 
-# Tool definitions
 @tool("web_search")
 def web_search(query: str) -> str:
     """
@@ -41,12 +37,28 @@ def web_search(query: str) -> str:
         JSON string containing search results.
     """
     try:
-        response = tavily_client.search(query=query)
-        return response
+        print("using web_search")
+        response = tavily_client.search(query=query, limit=5)
+        output_string = ""
+        if 'results' in response:
+            for i, result in enumerate(response['results']):
+                # Extract the required fields
+                title = result.get('title', '')
+                url = result.get('url', '')
+                content = result.get('content', '')
+                
+                # Format each result and add to the output string
+                output_string += f'Title: {title} \n URL: {url} \n Content: {content}'
+                
+                # Add a separator between results (except after the last one)
+                if i < len(response['results']) - 1:
+                    output_string += '\n\n'
+            return output_string
+        return "No results found"
     
     except Exception as e:
         print(f"Error in web search: {str(e)}")
-        return json.dumps({"results": []})
+        return f"Error in web search: {str(e)}"
 
 @tool("fetch_web_content")
 def fetch_web_content(url: list) -> str:
@@ -60,62 +72,112 @@ def fetch_web_content(url: list) -> str:
         The extracted content from the webpages.
     """
     try:
+        print("using fetch_web_content")
         response = tavily_client.extract(urls=url)
         return response["results"][0]["raw_content"]
     
     except Exception as e:
         print(f"Error in fetch web content: {str(e)}")
-        return f"Error in fetch web content"
+        return f"Error in fetch web content: {str(e)}"
+    
+@tool("vector_search")
+def vector_search(query: str):
+    """
+    Searches for the most relevant information chunks in the Pinecone vector database containing venture capital reports.
+    
+    This tool performs semantic search on VC industry data, including market trends, investment statistics, 
+    fundraising insights, and regulatory information. It returns the top most relevant text chunks 
+    that match the user's query about venture capital, startup funding, or industry-specific information.
+    
+    Args:
+        query (str): The user's search query about venture capital topics, industry trends, or related questions
+        
+    Returns:
+        str: A formatted string containing the most relevant text chunks from the VC reports database
+    """
+    print("Reached Vector search 1")
+    top_k = 10
+    chunks = query_pinecone(query, top_k)
+    contexts = "\n---\n".join(
+        {chr(10).join([f'Chunk {i+1}: {chunk}' for i, chunk in enumerate(chunks)])}
+    )
+    print("vector contexts", contexts)
+    return contexts
+
+@tool("final_answer")
+def final_answer(answer: str):
+    """
+    Provides a final answer to the user's question based on the report data and additional research.
+    
+    Args:
+        answer: The concise answer to the user's question, including any relevant information
+               from the report data and additional research.
+    
+    Returns:
+        The final answer formatted for presentation to the user.
+    """
+    return answer
 
 def init_chatbot_agent(report_data):
     """Initialize the chatbot agent with the report data"""
     
-    tools = [web_search, fetch_web_content]
+    tools = [web_search, fetch_web_content, vector_search, final_answer]
 
-    system_prompt = """You are a helpful Q&A assistant that helps users understand their business market analysis reports and answer additional questions.
-    
-    You have access to previously generated market analysis reports and tools to search for additional information.
-    
+    system_prompt = """You are a Q&A assistant that helps users understand business market analysis reports.
+
     Context:
-    - You have the following report data: {report_data}
-    
-    Rules:
-    - Use a conversational tone suitable for a chatbot interaction.
-    - Provide concise but informative responses.
-    - If searching for additional information, explain why you're doing so.
-    - Maintain the conversation history to provide contextually relevant responses.
-    - Cite sources when providing information from external websites.
-    - Do not use any tool more than twice in a single conversation turn.
-    - Always refer to previous interactions in the conversation if relevant.
+    - You have access to the following report data: {report_data}
+    - Available tools:
+    - web_search: Search web for user question-related information
+    - fetch_web_content: Get detailed content from specific URLs
+    - vector_search: Find VC advice, market trends and investment data
+    - final_answer: Provide your final response
+
+    PROCESS:
+    1. First try answering directly from report data
+    2. Use tools only if report data lacks information
+    3. Provide final answer after gathering sufficient information
+
+    RESPONSE STYLE:
+    - Be concise and direct
+    - Use 1-3 sentences for most answers
+    - Only elaborate when asked or necessary
+    - Use bullet points for lists, not paragraphs
+    - Cite sources when using external information
+
+    RULES:
+    - Maximum 2 tool uses per conversation turn
+    - Keep answers brief but accurate
+    - Use final_answer tool for your response
+    - If you don't know, say so briefly
+    - Never make up information
     """
 
     prompt = ChatPromptTemplate.from_messages([
         ("system", system_prompt),
-        MessagesPlaceholder(variable_name="messages"),
+        MessagesPlaceholder(variable_name="chat_history"),
         ("assistant", "Working memory: {scratchpad}"),
     ])
 
     llm = ChatOpenAI(
         model="gpt-4o-mini",
-        openai_api_key=os.getenv("OPENAI_API_KEY"),
+        openai_api_key=os.environ["OPENAI_API_KEY"],
         temperature=0.2
     )
 
-    def create_scratchpad(intermediate_steps: list[AgentAction]):
+    def create_scratchpad(intermediate_steps: list[tuple[AgentAction, str]]):
         research_steps = []
-        for i, action in enumerate(intermediate_steps):
-            if action.log != "TBD":
-                # this was the ToolExecution
-                research_steps.append(
-                    f"Tool: {action.tool}, input: {action.tool_input}\n"
-                    f"Output: {action.log}"
-                )
+        for i, (action, output) in enumerate(intermediate_steps):
+            research_steps.append(
+                f"Tool: {action.tool}, input: {action.tool_input}\n"
+                f"Output: {output}"
+            )
         return "\n---\n".join(research_steps)
 
     chatbot = (
         {
             "report_data": lambda x: x["report_data"],
-            "messages": lambda x: x["messages"],
+            "chat_history": lambda x: x["chat_history"],
             "scratchpad": lambda x: create_scratchpad(
                     intermediate_steps=x["intermediate_steps"]
             ),
@@ -125,215 +187,120 @@ def init_chatbot_agent(report_data):
     )
     return chatbot
 
-def agent_should_continue(state: ChatbotState) -> bool:
-    """Determine if the agent should continue or respond to the user"""
-    # Check if the last message contains a tool call
-    if len(state["intermediate_steps"]) == 0:
-        return False
+## Router and Parent Agent functions
+def run_oracle(state: ChatbotState, oracle):
+    print("run_oracle")
+    print(f"intermediate_steps: {state['intermediate_steps']}")
+    out = oracle.invoke(state)
     
-    last_action = state["intermediate_steps"][-1]
-    # Get the last assistant message content
-    messages = state["messages"]
-    for msg in reversed(messages):
-        if isinstance(msg, AIMessage):
-            # If there's no tool call or the last action used "fetch_web_content"
-            # which is typically the last tool used before responding
-            if not hasattr(msg, 'tool_calls') or last_action.tool == "fetch_web_content":
-                return False
-            break
-    
-    return True
-
-def run_agent(state: ChatbotState, chatbot):
-    """Run the chatbot agent to process the user's message"""
-    print("Running chatbot agent")
-    out = chatbot.invoke(state)
-    
-    # Check if the response contains tool calls
-    if hasattr(out, 'tool_calls') and len(out.tool_calls) > 0:
-        tool_call = out.tool_calls[0]
-        tool_name = tool_call["name"]
-        tool_args = tool_call["args"]
-        
-        action_out = AgentAction(
+    # Check if we have tool calls
+    if hasattr(out, 'tool_calls') and out.tool_calls:
+        tool_name = out.tool_calls[0]["name"]
+        tool_args = out.tool_calls[0]["args"]
+        action = AgentAction(
             tool=tool_name,
             tool_input=tool_args,
             log="TBD"
         )
+        # Track tool calls
+        tool_calls_count = state.get("tool_calls_count", 0) + 1
         
-        # Update intermediate steps with the new action
         return {
             **state,
-            "intermediate_steps": state["intermediate_steps"] + [action_out]
+            "intermediate_steps": state["intermediate_steps"] + [(action, "")],
+            "tool_calls_count": tool_calls_count
         }
     else:
-        # If no tool calls, add the response to messages and clear intermediate steps
+        # If no tool calls, use final_answer
+        action = AgentAction(
+            tool="final_answer",
+            tool_input=out.content,
+            log="TBD"
+        )
         return {
             **state,
-            "messages": state["messages"] + [out],
-            "intermediate_steps": []
+            "intermediate_steps": state["intermediate_steps"] + [(action, "")]
         }
 
+def router(state: ChatbotState):
+    # Check tool call limit
+    if state.get("tool_calls_count", 0) >= 5:
+        return "final_answer"
+    
+    # Get the last tool used
+    last_step = state["intermediate_steps"][-1]
+    
+    if isinstance(last_step, tuple):
+        action, output = last_step
+        return action.tool
+    else:
+        # If format is wrong, go to final_answer
+        print("Router invalid format")
+        return "final_answer"
+
 def run_tool(state: ChatbotState):
-    """Execute the tool specified in the last intermediate step"""
     tool_str_to_func = {
         "web_search": web_search,
-        "fetch_web_content": fetch_web_content
+        "fetch_web_content": fetch_web_content,
+        "vector_search": vector_search,
+        "final_answer": final_answer
     }
     
-    # Get the last action from intermediate steps
-    last_action = state["intermediate_steps"][-1]
+    # Get the last action
+    last_action, _ = state["intermediate_steps"][-1]
+    
     tool_name = last_action.tool
     tool_args = last_action.tool_input
-
-    print(f"Executing {tool_name} with args: {tool_args}")
     
-    # Run the tool
-    out = tool_str_to_func[tool_name].invoke(input=tool_args)
+    print(f"{tool_name}.invoke(input={tool_args})")
     
-    # Update the action with the tool output
-    updated_action = AgentAction(
-        tool=tool_name,
-        tool_input=tool_args,
-        log=str(out)
-    )
+    # Run tool
+    out = tool_str_to_func[tool_name](tool_args)
     
-    # Replace the last action in intermediate steps with the updated action
+    # Update the intermediate steps with the result
+    updated_steps = state["intermediate_steps"][:-1]
+    updated_steps.append((last_action, str(out)))
+    
     return {
         **state,
-        "intermediate_steps": state["intermediate_steps"][:-1] + [updated_action]
+        "intermediate_steps": updated_steps
     }
 
-def router(state: ChatbotState):
-    """Router function to determine the next node in the graph"""
-    try:
-        if len(state["intermediate_steps"]) == 0:
-            return END
-        last_action = state["intermediate_steps"][-1]
-        if last_action.log == "TBD":
-            return last_action.tool
-        else:
-            return "agent"
-    except Exception as e:
-        print(f"Error in router: {str(e)}")
-        return END
+## Langraph - Designing the Graph
+def create_graph(chatbot_agent):
+    tools = [web_search, fetch_web_content, vector_search, final_answer]
 
-def create_chatbot_graph(chatbot_agent):
-    """Create the LangGraph for the chatbot with memory"""
-    try:
-        print("Starting graph creation")
-        # Define tools directly
-        tool_names = ["web_search", "fetch_web_content"]
-        
-        # Create the state graph
-        print("Creating StateGraph")
-        graph = StateGraph(ChatbotState)
-        print("StateGraph created")
-        
-        # Add nodes
-        print("Adding agent node")
-        graph.add_node("agent", partial(run_agent, chatbot=chatbot_agent))
-        print("Agent node added")
-        
-        print("Adding web_search node")
-        graph.add_node("web_search", run_tool)
-        print("web_search node added")
-        
-        print("Adding fetch_web_content node")
-        graph.add_node("fetch_web_content", run_tool)
-        print("fetch_web_content node added")
-        
-        # Set the entry point
-        print("Setting entry point")
-        graph.set_entry_point("agent")
-        print("Entry point set")
-        
-        # Add conditional edges from agent
-        print("Adding conditional edges")
-        graph.add_conditional_edges(
-            source="agent",
-            path=router
-        )
-        print("Conditional edges added")
-        
-        # Add edges from tools back to the agent
-        print("Adding tool edges")
-        for tool_name in tool_names:
-            print(f"Adding edge from {tool_name} to agent")
-            graph.add_edge(tool_name, "agent")
-        print("Tool edges added")
-        
-        # Compile the graph
-        print("Compiling graph")
-        runnable = graph.compile()
-        print("Graph compiled")
-        
-        return runnable
-    except Exception as e:
-        print(f"Error in create_chatbot_graph: {str(e)}")
-        import traceback
-        print(traceback.format_exc())
-        raise
-
-
-def create_qa_chatbot(report_data=None):
-    """Main function to create and return the chatbot with the report data"""
-    if report_data is None:
-        report_data = {}
-    print("Creating chatbot agent")
-    chatbot_agent = init_chatbot_agent(report_data)
-    print("Chatbot agent initialized")
-    runnable_graph = create_chatbot_graph(chatbot_agent)
-    print("Graph created")
+    graph = StateGraph(ChatbotState)
     
-    # Create a stateful runnable with memory using thread
-    stateful_runnable = runnable_graph.with_config(
-        {"thread": {"configurable": {"session_id": "chatbot_session"}}}
+    # Add nodes
+    graph.add_node("oracle", partial(run_oracle, oracle=chatbot_agent))
+    graph.add_node("web_search", run_tool)
+    graph.add_node("fetch_web_content", run_tool)
+    graph.add_node("vector_search", run_tool)
+    graph.add_node("final_answer", run_tool)
+
+    # Set the entry point to start with the oracle
+    graph.set_entry_point("oracle")
+    
+    # Add conditional edges based on the router function
+    graph.add_conditional_edges(
+        source="oracle",
+        path=router,
     )
     
-    return stateful_runnable
+    # Create edges from each tool back to the oracle
+    for tool_obj in tools:
+        if tool_obj.name != "final_answer":
+            graph.add_edge(tool_obj.name, "oracle")
 
-def handle_user_message_with_history(chatbot, message_history, report_data=None):
-    """
-    Handle a user message with full conversation history and return the chatbot response.
-    
-    Args:
-        chatbot: The configured chatbot instance
-        message_history: List of message objects (HumanMessage, AIMessage)
-        report_data: Dictionary of report data for context
-        
-    Returns:
-        The chatbot's response text
-    """
-    if report_data is None:
-        report_data = {}
-    
-    print(f"Handling user message with {len(message_history)} messages in history")
-    
-    # Create the initial state with the complete message history
-    initial_state = {
-        "messages": message_history,
-        "intermediate_steps": [],
-        "report_data": report_data
-    }
-    
-    print("Initial state created with message history")
-    
-    # Process the message through the graph
-    try:
-        result = chatbot.invoke(initial_state)
-        print("Graph invoked successfully")
-        
-        # Extract the chatbot's response messages (should be the last AI message)
-        response_messages = [msg for msg in result["messages"] if isinstance(msg, AIMessage)]
-        
-        # Return the latest response
-        if response_messages:
-            return response_messages[-1].content
-        else:
-            return "I'm sorry, I couldn't process your request."
-    except Exception as e:
-        import traceback
-        print(f"Error in handle_user_message_with_history: {str(e)}")
-        print(traceback.format_exc())
-        return f"I encountered an error while processing your request. Please try again."
+    # If anything goes to final_answer, it must then move to END
+    graph.add_edge("final_answer", END)
+
+    # Compile the graph
+    runnable = graph.compile()
+    return runnable
+
+def run_chatbot(report_data=None):
+    chatbot_agent = init_chatbot_agent(report_data)
+    runnable = create_graph(chatbot_agent)
+    return runnable
