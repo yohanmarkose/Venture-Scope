@@ -24,7 +24,8 @@ jobs:
         python -m pip install --upgrade pip
         pip install pytest pytest-mock
         if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-        pip install fastapi httpx pandas plotly langchain-core openai pytest-mock snowflake-connector-python python-dotenv
+        pip install fastapi httpx pandas plotly langchain-core openai pytest-mock snowflake-connector-python python-dotenv spacy
+        python -m spacy download en_core_web_sm
         
     - name: Create mock environment variables for testing
       run: |
@@ -45,6 +46,7 @@ jobs:
         echo "GOOGLE_API_KEY=test-key" >> $GITHUB_ENV
         echo "GOOGLE_SEARCH_ENGINE_ID=test-id" >> $GITHUB_ENV
         echo "GOOGLE_MAPS_API_KEY=test-key" >> $GITHUB_ENV
+        echo "PINECONE_ENVIRONMENT=test-env" >> $GITHUB_ENV
     
     - name: Display directory structure for debugging
       run: |
