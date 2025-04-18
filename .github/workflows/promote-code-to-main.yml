@@ -2,37 +2,23 @@ name: Promote to Main
 
 on:
   workflow_run:
-    workflows: ["Venture-Scope Testing"]
+    workflows: ["Venture-Scope Testing"]  # Must match EXACTLY the name in your testing workflow
     branches: [dev]
     types: [completed]
 
 permissions:
-  contents: write
-  actions: read
-  checks: read
+  contents: write  # Needed for pushing to branches
 
 jobs:
-  debug:
-    runs-on: ubuntu-latest
-    if: always()
-    steps:
-      - name: Print workflow information
-        run: |
-          echo "Triggered by workflow: ${{ github.event.workflow_run.name }}"
-          echo "Workflow conclusion: ${{ github.event.workflow_run.conclusion }}"
-          echo "Workflow branch: ${{ github.event.workflow_run.head_branch }}"
-
   promote:
-    needs: debug
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
-          ref: main
-          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0  # Need full history for merge
+          token: ${{ secrets.GITHUB_TOKEN }}  # Use this or a personal access token
           
       - name: Configure Git
         run: |
@@ -41,6 +27,7 @@ jobs:
           
       - name: Merge dev into main
         run: |
-          git fetch origin dev
-          git merge origin/dev --no-ff -m "Auto-merge dev into main"
+          git checkout main
+          git pull
+          git merge --no-ff origin/dev -m "Auto-merge dev into main"
           git push
