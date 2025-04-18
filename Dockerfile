@@ -17,7 +17,7 @@ RUN node --version && npm --version && npx --version
 
 # Copy requirements first for layer caching
 COPY requirements.txt .
-COPY .env /app/.env
+#COPY .env /app/.env
 
 # Install dependencies
 RUN pip install --no-cache-dir -r requirements.txt
