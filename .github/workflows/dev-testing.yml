@@ -57,13 +57,11 @@ jobs:
         
     - name: Run unit tests
       run: |
-        cd $GITHUB_WORKSPACE
-        PYTHONPATH=$GITHUB_WORKSPACE pytest backend/app/test_data/test_all.py -v
+        pytest backend/app/test_data/test_all.py -v
         
     - name: Run integration tests
       run: |
-        cd $GITHUB_WORKSPACE
-        PYTHONPATH=$GITHUB_WORKSPACE pytest backend/app/integrations/test.py -v --log-cli-level=DEBUG
+        pytest backend/app/integrations/test.py -v --log-cli-level=DEBUG
 
   security-scan:
     runs-on: ubuntu-latest
