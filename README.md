@@ -18,6 +18,8 @@ To create a comprehensive startup advisory system, the project integrates data f
 
 - [Project Document](https://docs.google.com/document/d/1BaeKci7nt9ODAldre-vneEculW-P1jrT8MIS0doFl_s/edit?tab=t.0)
 
+- [Video Walkthrough](https://northeastern-my.sharepoint.com/:v:/g/personal/gangurde_a_northeastern_edu/EfdzaIhppLNGgY2jeJWwTyABnL_a06F4qwEhP3bRorFFGw?e=tk4avl&nav=eyJyZWZlcnJhbEluZm8iOnsicmVmZXJyYWxBcHAiOiJTdHJlYW1XZWJBcHAiLCJyZWZlcnJhbFZpZXciOiJTaGFyZURpYWxvZy1MaW5rIiwicmVmZXJyYWxBcHBQbGF0Zm9ybSI6IldlYiIsInJlZmVycmFsTW9kZSI6InZpZXcifX0%3D)
+
 ## Architecture Diagram
 ![architecture_diagram](https://github.com/user-attachments/assets/28b256b1-4322-4d50-9c11-8f639febc9a8)
 
