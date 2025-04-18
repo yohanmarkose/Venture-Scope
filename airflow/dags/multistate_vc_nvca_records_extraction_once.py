@@ -20,7 +20,7 @@ from services.mistral_orc_processing import pdf_mistralocr_converter
 @dag(
     dag_id='scrape_nvca_vc_statewise_grouped_once',
     default_args={
-        'owner': 'data_team',
+        'owner': 'airflow',
         'start_date': days_ago(1),
         'retries': 1,
     },
