@@ -1,8 +1,8 @@
 import openai, os
 from pinecone import Pinecone, ServerlessSpec
 from dotenv import load_dotenv
-from chunk_strategy import semantic_chunking
-from s3 import S3FileManager
+from features.vecotre_db.chunking_strategy import semantic_chunking
+from services.s3 import S3FileManager
 load_dotenv()
 
 # Initialize Pinecone

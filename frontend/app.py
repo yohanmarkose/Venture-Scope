@@ -633,8 +633,8 @@ def main():
             
             # Call the API
             api_calls = [
-                ("market_analysis", "market_analysis", data)
-                # ("location_intelligence", "location_intelligence", data)
+                ("market_analysis", "market_analysis", data),
+                ("location_intelligence", "location_intelligence", data)
 
             ]
             
@@ -658,7 +658,7 @@ def main():
     if st.session_state.submitted and st.session_state.api_results:
         
         market_data = st.session_state.api_results.get("market_analysis", {})
-        # location_data = st.session_state.api_results.get("location_intelligence", {})
+        location_data = st.session_state.api_results.get("location_intelligence", {})
         
         # if "error" in location_data:
         #     st.error(f"Error retrieving data: {location_data['error']}")
@@ -685,9 +685,9 @@ def main():
             with market_analysis:
                 st.markdown('<div class="section-header">Market Overview</div>', unsafe_allow_html=True)
                 fig = go.Figure(json.loads(market_data.get("plot")))
-                st.header(market_data.get("industry").title())
+                st.header(f"Market Analysis For {market_data.get('industry', '').title()} Industry")
                 # Download the markdown
-                st.markdown(f"[Download Market Analysis]({market_data.get("file_path")})")
+                st.markdown(f"[Download Market Analysis]({market_data.get('file_path')})")
                 
                 st.plotly_chart(fig)
                 st.markdown(market_data.get("answer"))
@@ -718,7 +718,6 @@ def main():
                             
                             if response.status_code == 200:
                                 summary_data = response.json()
-                                st.markdown(summary_data.get("industry", "").title())
                                 # Display the markdown content
                                 st.markdown(summary_data.get("answer", ""))
                             else:
@@ -730,14 +729,14 @@ def main():
                     
             with location_intelligence:
                 st.markdown('<div class="section-header">Q & A</div>', unsafe_allow_html=True)
-                # if "locations" in location_data:
-                #     display_locations(location_data.get("locations", []))
-                # else:
-                #     st.warning("No location data available.")
-                # if "competitors" in location_data:
-                #     display_competitors(location_data.get("competitors", []))
-                # else:
-                #     st.warning("No competitor data available.")
+                if "locations" in location_data:
+                    display_locations(location_data.get("locations", []))
+                else:
+                    st.warning("No location data available.")
+                if "competitors" in location_data:
+                    display_competitors(location_data.get("competitors", []))
+                else:
+                    st.warning("No competitor data available.")
             
             with chat_with_experience:
                 st.markdown('<div class="section-header">💬 Chat with Industry Experts - Ask them about their stories</div>', unsafe_allow_html=True)
@@ -867,25 +866,18 @@ def main():
                                 <div>{chat["content"]}</div>
                             </div>
                             """, unsafe_allow_html=True)
-                
-                # Create input for user question
+
                 user_question = st.text_input("Ask a question about your business:", placeholder="e.g., What are the main competitors in this industry?")
-                
-                # Submit button
+
                 if st.button("Ask") and user_question:
-                    # Add user message to display history
                     st.session_state.chat_history_display.append({"role": "user", "content": user_question})
                     
-                    # Prepare message history for API call
                     message_history = []
-                    # Convert display history to message history format
                     for msg in st.session_state.chat_history_display:
                         message_history.append({
                             "type": "human" if msg["role"] == "user" else "ai", 
                             "content": msg["content"]
                         })
-                    
-                    # Prepare data for API call
                     qa_data = {
                         "industry": selected_industry,
                         "product": st.session_state.products,
@@ -900,7 +892,6 @@ def main():
                     
                     with st.spinner("Processing your question..."):
                         try:
-                            # Make API call to get answer
                             response = requests.post(
                                 f"{API_URL}/q_and_a",
                                 json=qa_data
@@ -908,11 +899,7 @@ def main():
                             
                             if response.status_code == 200:
                                 answer = response.json().get("answer", "Sorry, I couldn't process your request.")
-                                
-                                # Add to display history
                                 st.session_state.chat_history_display.append({"role": "assistant", "content": answer})
-                                
-                                # Force refresh to update the UI
                                 st.rerun()
                             else:
                                 st.error(f"Error: {response.status_code} - {response.text}")
@@ -920,14 +907,13 @@ def main():
                             st.error(f"Error processing request: {str(e)}")
                             import traceback
                             st.error(traceback.format_exc())
-                    
-            
-            # Add a button to start a new analysis
+
             if st.button("Start New Analysis", type="primary"):
                 st.session_state.submitted = False
                 st.session_state.api_results = None
                 st.session_state.products = []
                 st.session_state.chat_history_display = []
+                message_history = []
                 st.rerun()
     
     # Show welcome screen when not submitted

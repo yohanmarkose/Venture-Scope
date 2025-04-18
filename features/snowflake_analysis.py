@@ -10,7 +10,7 @@ class SnowflakeConnector:
     This class handles connections, table creation, data loading, and view generation.
     """
     
-    def __init__(self, industry, size_category=None):
+    def __init__(self, industry=None, size_category=None):
         """Initialize Snowflake connector with credentials from environment or config file"""
         load_dotenv()  # Load environment variables from .env file
         
@@ -80,23 +80,25 @@ class SnowflakeConnector:
     def get_company_data_by_industry(self, limit=20):
         """Get company data filtered by industry and optionally by size category"""
 
-        table_name = "ENHANCED_COMPANIES"
         where_clause = f"WHERE INDUSTRY LIKE '%{self.industry}%'"
         
         if self.size_category and self.size_category.lower() == "large":
-            where_clause += f" AND MARKET_CAP IS NOT NULL"
-            table_name = "LARGE_COMPANY_DATA_FINAL"
+            large_where_clause = where_clause + f" AND MARKET_CAP IS NOT NULL"
+            large_table_name = "LARGE_COMPANY_DATA_FINAL"
             query_large = f"""
             SELECT *
-            FROM opportunity_analysis.market_analysis.{table_name}
-            {where_clause}
+            FROM opportunity_analysis.market_analysis.{large_table_name}
+            {large_where_clause}
             ORDER BY MARKET_CAP DESC
             LIMIT {limit};
             """
-            return self.execute_query(query_large)
-        
+            df = self.execute_query(query_large)
+            if not df.empty and df.shape[0] > 4:
+                return df
+            
+        table_name = "ENHANCED_COMPANIES"
         if self.size_category:
-            where_clause += f" AND SIZE_CATAGORY ILIKE '{self.size_category}'"
+            where_clause += f" AND SIZE_CATAGORY = '{self.size_category}'"
         
         query_normal = f"""
         SELECT *
@@ -107,10 +109,34 @@ class SnowflakeConnector:
         """
         return self.execute_query(query_normal)
 
+    def get_real_estate_data(self):
+        query = f"""
+        SELECT 
+            GEO_NAME as state,
+            AVG(VALUE) as avg_price_index,
+            RANK() OVER (ORDER BY AVG(VALUE) DESC) as state_rank
+        FROM 
+            OPPORTUNITY_ANALYSIS.LOCATION_ANALYSIS.REAL_ESTATE_RATES_US
+        WHERE 
+            LEVEL = 'State'
+            AND INDEX_TYPE = 'purchase-only' 
+            AND SEASONALLY_ADJUSTED = FALSE 
+            AND PROPERTY_CLASSIFICATION = 'traditional'
+        GROUP BY 
+            GEO_NAME
+        ORDER BY 
+            avg_price_index DESC;
+        """
+        return self.execute_query(query)
 
     
-    def get_real_estate_data(self, region, limit=20):
-        pass
+    def get_per_capita_income_data(self):
+        query = f"""
+        SELECT CITY, STATE, PER_CAPITA_INCOME
+        FROM OPPORTUNITY_ANALYSIS.LOCATION_ANALYSIS.PER_CAPITA_INCOME_DETAIL
+        ORDER BY STATE, CITY;
+        """
+        return self.execute_query(query)
 
     def get_top_performers_by_region(self, region, limit=20):
         """Get top performing companies in a specific region"""
@@ -133,31 +159,31 @@ class SnowflakeConnector:
         """
         return self.execute_query(query)
     
-    def execute_setup(self):
-        """Run all setup operations in sequence"""
-        print("Setting up Snowflake environment...")
+    # def execute_setup(self):
+    #     """Run all setup operations in sequence"""
+    #     print("Setting up Snowflake environment...")
         
-        if not self.connect():
-            return False
+    #     if not self.connect():
+    #         return False
         
-        try:
-            # # Create enhanced companies table
-            # self.create_enhanced_companies_table()
+    #     try:
+    #         # # Create enhanced companies table
+    #         # self.create_enhanced_companies_table()
             
-            # # Create views by company size
-            # self.create_company_size_views()
+    #         # # Create views by company size
+    #         # self.create_company_size_views()
             
-            # # Create tickers table and S3 integration
-            # self.create_tickers_table_and_stage()
+    #         # # Create tickers table and S3 integration
+    #         # self.create_tickers_table_and_stage()
             
-            print("Snowflake setup completed successfully!")
-            return True
+    #         print("Snowflake setup completed successfully!")
+    #         return True
             
-        except Exception as e:
-            print(f"Error during Snowflake setup: {e}")
-            return False
-        finally:
-            self.disconnect()
+    #     except Exception as e:
+    #         print(f"Error during Snowflake setup: {e}")
+    #         return False
+    #     finally:
+    #         self.disconnect()
 
 # Example usage
 if __name__ == "__main__":
@@ -173,11 +199,5 @@ if __name__ == "__main__":
     if fintech_companies is not None:
         print(f"Found {len(fintech_companies)} fintech companies:")
         print(fintech_companies[['COMPANY_NAME', 'SIZE', 'WEBSITE', 'MARKET_CAP', 'PERFORMANCE_SCORE']])
-    
-    # Example: Get top performers in California
-    # california_companies = snowflake.get_top_performers_by_region("california", limit=5)
-    # if california_companies is not None:
-    #     print(f"Top 5 performers in California:")
-    #     print(california_companies[['COMPANY_NAME', 'INDUSTRY', 'PERFORMANCE_SCORE']])
     
     sn_obj.disconnect()
