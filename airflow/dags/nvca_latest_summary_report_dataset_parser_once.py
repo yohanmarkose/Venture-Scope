@@ -73,7 +73,7 @@ def push_to_pinecone(markdown_file_path: str):
     ]
 
     index = connect_to_pinecone_index()
-    upsert_vectors(index, docs, namespace='vc_state_reports')
+    upsert_vectors(index, docs, namespace='nvdia_quarterly_reports')
     print(f"✅ Uploaded {len(docs)} vectors for `{state}`")
 
 with DAG(
