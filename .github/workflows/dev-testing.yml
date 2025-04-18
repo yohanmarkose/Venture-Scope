@@ -40,6 +40,11 @@ jobs:
         echo "SNOWFLAKE_DATABASE=test_db" >> $GITHUB_ENV
         echo "SNOWFLAKE_ROLE=test_role" >> $GITHUB_ENV
         echo "TAVILY_API_KEY=test-key" >> $GITHUB_ENV
+        echo "PINECONE_API_KEY=test-key" >> $GITHUB_ENV
+        echo "PINECONE_INDEX=test-index" >> $GITHUB_ENV
+        echo "GOOGLE_API_KEY=test-key" >> $GITHUB_ENV
+        echo "GOOGLE_SEARCH_ENGINE_ID=test-id" >> $GITHUB_ENV
+        echo "GOOGLE_MAPS_API_KEY=test-key" >> $GITHUB_ENV
     
     - name: Display directory structure for debugging
       run: |
