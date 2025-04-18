@@ -577,10 +577,10 @@ def main():
     # Product configuration
     st.sidebar.markdown("<div style='font-weight:600; font-size:18px; margin-top:24px; margin-bottom:16px;'>Product Configuration</div>", unsafe_allow_html=True)
     
-    new_product = st.sidebar.text_input("Add a product/service:")
+    new_product = st.sidebar.text_input("Add a service/product:")
     col1, col2 = st.sidebar.columns([3, 1])
     with col1:
-        if st.button("Add Product/Service", key="add_product", use_container_width=True):
+        if st.button("Add Services/Product", key="add_product", use_container_width=True):
             if new_product and new_product not in st.session_state.products:
                 st.session_state.products.append(new_product)
                 st.rerun()
