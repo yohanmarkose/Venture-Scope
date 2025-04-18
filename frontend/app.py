@@ -10,7 +10,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime
 import uuid
-from load_dotenv import load_dotenv
+from dotenv import load_dotenv
 
 load_dotenv()
 
@@ -184,7 +184,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # API endpoint
-API_URL = f"{os.getenv('API_URL', 'http://localhost:8000')}"
+API_URL = f"{os.getenv('API_URL', 'http://localhost:8080')}"
 
 @st.cache_data
 def load_cities():

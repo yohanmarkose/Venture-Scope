@@ -475,19 +475,21 @@ def question_and_analysis(query: QuestionRequest):
         market_file = f"{base_path}market_analysis.md"
         market_analysis_output = s3_obj.load_s3_file_content(market_file)
 
-        # base_path = base_path = f"users/temp/"
-        # s3_obj = S3FileManager(AWS_BUCKET_NAME, base_path)
-        # file = f"{base_path}location_analysis.md"
-        # location_analysis_output = s3_obj.load_s3_file_content(file)
+        base_path = base_path = f"users/temp/"
+        s3_obj = S3FileManager(AWS_BUCKET_NAME, base_path)
+        file = f"{base_path}location_analysis.md"
+        location_analysis_output = s3_obj.load_s3_file_content(file)
 
         # Use location information from the query
-        location_analysis_output = ", ".join(query.location_city)
+        # location_analysis_output = ", ".join(query.location_city)
+        
+        industry = classify_industry(query.industry, query.product)
         
         # Prepare report data
         report_data = {
             "market_analysis": market_analysis_output,
             "location_intelligence": location_analysis_output,
-            "recommendations": f"{query.industry}, {query.size}, {query.budget}, \n{query.unique_selling_proposition}"
+            "recommendations": f"{industry}, {query.size}, {query.budget}, \n{query.unique_selling_proposition}"
         }
         print("Report data:", report_data)
         
