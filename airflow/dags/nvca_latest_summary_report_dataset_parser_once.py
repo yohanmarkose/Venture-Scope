@@ -48,7 +48,7 @@ with DAG(
     start_date=days_ago(1),
     schedule_interval=None,
     catchup=False,
-    tags=["vc_reports", "scraping", "markdown"],
+    tags=["vc_reports", "scraping", "markdown",'venture-scope'],
     max_active_runs=1,
     max_active_tasks=1
 ) as dag:

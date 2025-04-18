@@ -32,7 +32,7 @@ dag = DAG(
     default_args=default_args,
     description='Scrape SBA business structure information using Selenium',
     schedule_interval='@weekly',
-    tags=["vc_reports", "scraping", "markdown"],
+    tags=["vc_reports", "scraping", "markdown",'venture-scope'],
     catchup=False
 )
 

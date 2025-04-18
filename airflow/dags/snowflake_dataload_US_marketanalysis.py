@@ -6,9 +6,12 @@ from airflow.operators.empty import EmptyOperator
 from airflow.utils.task_group import TaskGroup
 from airflow.providers.snowflake.operators.snowflake import SnowflakeOperator
 from airflow.providers.amazon.aws.hooks.s3 import S3Hook
+from airflow.operators.trigger_dagrun import TriggerDagRunOperator
 from airflow.models import Variable
 from datetime import datetime
+import logging
 from services.snowflake.ticker_file import fetch_all_us_listed_companies
+from services.snowflake.yfinace_data_join import enhance_company_data_with_yfinance
 
 default_args = {
     'owner': 'airflow',
@@ -30,13 +33,18 @@ def upload_tickers_to_s3(**kwargs):
         replace=True
     )
 
+def snowflake_finaltable():
+    logging.info("Starting enhancement process with yfinance.")
+    enhance_company_data_with_yfinance()
+    logging.info("Enhancement process completed.")
+
 
 with DAG(
-    dag_id='custom_marketanalysis_raw_data_snowflake_v1',
+    dag_id='custom_marketanalysis_raw_data_snowflake',
     default_args=default_args,
-    tags=['snowflake','dataload','market_analysis','freecompanydatset','marketplace'],
+    tags=['snowflake','dataload','market_analysis','freecompanydatset','marketplace','venture-scope'],
     description='Loads or reloads snowflakes tables dataset from Snowflake Marketplace for Freecompanydataset',
-    schedule_interval=None,
+    schedule_interval='0 0 1 1,4,7,10 *',
     start_date=datetime(2025, 1, 1),
     catchup=False,
 ) as dag:
@@ -105,7 +113,7 @@ with DAG(
         create_snowflake_table >> snowflake_stage >> snowflake_format >> load_to_snowflake
 
     
-    with TaskGroup("snowflake_analytics") as snowflake_analytics:
+    with TaskGroup("snowflake_rawtableload") as snowflake_rawtableload:
 
         # 1. Fuzzy match UDF
         snowflake_function = SnowflakeOperator(
@@ -133,7 +141,7 @@ $$;"""
             snowflake_conn_id='snowflake_default',
             sql="""
                 USE ROLE ACCOUNTADMIN;
-                ALTER WAREHOUSE DBT_WH SET WAREHOUSE_SIZE = LARGE;
+                ALTER WAREHOUSE DBT_WH SET WAREHOUSE_SIZE = XSMALL;
                 USE ROLE FIN_ROLE;
                 USE WAREHOUSE DBT_WH;
                 USE SCHEMA OPPORTUNITY_ANALYSIS.MARKET_ANALYSIS;
@@ -169,8 +177,15 @@ $$;"""
         # DAG flow inside the TaskGroup
         snowflake_function >> snowflake_large_cmp
 
+
+    snowflake_analytics = PythonOperator(
+        task_id='snowflake_analytics',
+        python_callable=snowflake_finaltable,
+        provide_context=True
+    )
+
     # End task
     end = EmptyOperator(task_id='end')
 
     # DAG execution flow        
-    start >> scraping_cmp_ticker_file >> upload_to_s3 >> snowflake_group >> snowflake_analytics >> end
+    start >> scraping_cmp_ticker_file >> upload_to_s3 >> snowflake_group >> snowflake_rawtableload >> snowflake_analytics >> end

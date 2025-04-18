@@ -20,7 +20,7 @@ from services.vector_store import create_pinecone_vector_store
     },
     schedule_interval='@once',
     catchup=False,
-    tags=["ocr", "markdown", "chatbots","pinecone"],
+    tags=["ocr", "markdown", "chatbots","pinecone","expertschatbot",'venture-scope'],
     max_active_runs=1,
     max_active_tasks=2
 )
