@@ -23,6 +23,8 @@ from features.chat_with_expert import ExpertChatRequest, chat_with_expert_endpoi
 
 load_dotenv()
 
+
+
 app = FastAPI()
 
 AWS_BUCKET_NAME = os.getenv("AWS_BUCKET_NAME")
