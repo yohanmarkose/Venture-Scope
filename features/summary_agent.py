@@ -11,6 +11,8 @@ from langchain_core.tools import tool
 from langchain_core.messages import ToolCall, ToolMessage
 from langchain_openai import ChatOpenAI
 from functools import partial
+from features.snowflake_analysis import SnowflakeConnector
+from features.vecotre_db.pinecone_index import query_pinecone
 
 from tavily import TavilyClient
 
@@ -38,21 +40,6 @@ class SummaryAgentState(TypedDict):
     location_intelligence_output: Optional[str]
     emerging_trends_output: Optional[str]
 
-# Tools for Summary Agent
-@tool("vector_search")
-def vector_search(query: str):
-    """
-    Searches for the most relevant chunks in the Pinecone index based on the query.
-    This tool is used to retrieve VC advice and best practices.
-    """
-    pass
-    # top_k = 5
-    # chunks = query_pinecone(query, top_k)
-    # contexts = "\n---\n".join(
-    #     {chr(10).join([f'Chunk {i+1}: {chunk}' for i, chunk in enumerate(chunks)])}
-    # )
-    # return contexts
-
 @tool("web_search")
 def web_search(query: str) -> str:
     """
@@ -66,41 +53,50 @@ def web_search(query: str) -> str:
         JSON string containing search results.
     """
     try:
-        response = tavily_client.search(query=query)
-        return response
+        response = tavily_client.search(query=query, limit=5)
+        output_string = ""
+        if 'results' in response:
+            for i, result in enumerate(response['results']):
+                # Extract the required fields
+                title = result.get('title', '')
+                url = result.get('url', '')
+                content = result.get('content', '')
+                
+                # Format each result and add to the output string
+                output_string += f'Title: {title} \n URL: {url} \n Content: {content}'
+                
+                # Add a separator between results (except after the last one)
+                if i < len(response['results']) - 1:
+                    output_string += '\n\n'
+                return output_string
     
     except Exception as e:
         print(f"Error in web search: {str(e)}")
         return json.dumps({"results": []})
 
-@tool("snowflake_real_estate")
-def snowflake_real_estate(location: str = None, budget_level: str = None):
+@tool("vector_search")
+def vector_search(query: str):
     """
-    Fetches real estate data specific to the user's location preferences and budget.
-    This tool provides detailed costs, availability, and property information.
+    Searches for the most relevant information chunks in the Pinecone vector database containing venture capital reports.
+    
+    This tool performs semantic search on VC industry data, including market trends, investment statistics, 
+    fundraising insights, and regulatory information. It returns the top most relevant text chunks 
+    that match the user's query about venture capital, startup funding, or industry-specific information.
     
     Args:
-        location: The user's preferred business location
-        budget_level: The user's budget level (low, mid, high)
-    
+        query (str): The user's search query about venture capital topics, industry trends, or related questions
+        
     Returns:
-        DataFrame with relevant real estate information
+        str: A formatted string containing the most relevant text chunks from the VC reports database
     """
-    pass
-    # snow_obj = SnowflakeConnector(location=location, budget_level=budget_level)
-    # snow_obj.connect()
-    
-    # real_estate_data = snow_obj.get_real_estate_data()
-    
-    # if real_estate_data is not None:
-    #     if budget_level and budget_level.lower() == "low":
-    #         result = real_estate_data[['PROPERTY_TYPE', 'LOCATION', 'COST_PER_SQFT', 'AVAILABILITY']]
-    #     elif budget_level and budget_level.lower() == "mid":
-    #         result = real_estate_data[['PROPERTY_TYPE', 'LOCATION', 'COST_PER_SQFT', 'SIZE', 'AMENITIES']]
-    #     else:  # high budget
-    #         result = real_estate_data[['PROPERTY_TYPE', 'LOCATION', 'COST_PER_SQFT', 'SIZE', 'AMENITIES', 'PREMIUM_FEATURES']]
-    
-    # return result
+    print("Reached Vector search 1")
+    top_k = 10
+    chunks = query_pinecone(query, top_k)
+    contexts = "\n---\n".join(
+        {chr(10).join([f'Chunk {i+1}: {chunk}' for i, chunk in enumerate(chunks)])}
+    )
+    print("vector contexts", contexts)
+    return contexts
 
 @tool("final_recommendations")
 def final_recommendations(
@@ -133,48 +129,39 @@ def final_recommendations(
         "risk_assessment": risk_assessment,
         "resource_recommendations": resource_recommendations
     }
-    
     return report
 
 def init_summary_agent(industry, location, budget_level, market_analysis_output, location_intelligence_output):
-    tools = [web_search, final_recommendations]
+    tools = [web_search, final_recommendations, vector_search]
     
     ## Designing Agent Prompt
-    system_prompt = f"""You are a Summary and Recommendations Agent that analyzes outputs from various business intelligence tools and synthesizes them into actionable business recommendations.
+    system_prompt = f"""You are a Summary & Recommendations Agent creating actionable business insights.
 
-    You have access to outputs from two previous analyses:
-    1. Market Analysis Output: Provides competitor analysis and market positioning
-    2. Location Intelligence Output: Evaluates locations based on policy and real estate data
-
-    Current Context:
+    CONTEXT:
     - Industry: {industry or 'Not specified'}
-    - Location: {location or 'Not specified'}
-    - Budget Level: {budget_level or 'Not specified'}
+    - Location: {location or 'Not specified'} 
+    - Budget: {budget_level or 'Not specified'}
 
-    Your task is to synthesize these outputs and provide a comprehensive business recommendation report. The report should include:
+    INPUT SOURCES:
+    - Market Analysis: Competition and trends data
+    - Location Intelligence: Location-specific insights
+    - Research Tools: Use for supplementary data only when needed
 
-    1. An executive summary that captures the key insights
-    2. A synthesis of market analysis insights
-    3. Location recommendations with reasoning
-    4. Step-by-step action plan for business establishment
-    5. Risk assessment with mitigation strategies
-    6. Recommended resources, tools, or partnerships
+    REQUIRED OUTPUT SECTIONS - ALL MUST BE INCLUDED:
+    1. executive_summary: Concise overview of findings from amrket analysis and location intelligence
+    2. market_analysis_insights: Key market insights and insights from market analysis
+    3. location_recommendations: Optimal location with specific advantages from location intelligence
+    4. action_steps: Sequential plan for business establishment (web search and vector search)
+    5. risk_assessment: Critical risks and mitigation strategies 
+    6. resource_recommendations: Tools, partnerships, and support networks
 
-    Rules:
-    - Base your recommendations on concrete data from the previous analyses
-    - Prioritize findings based on the user's budget level and constraints
-    - Provide recommendations that are specific, actionable, and realistic
-    - Balance optimism with practical risk assessment
-    - Do not repeat information verbatim; synthesize and transform it
-    - Do not add bold or italics for any numerical values
-    - If multiple locations were analyzed, recommend the best option with reasoning
-    - Tailor your recommendations to the specific industry
-    - For high-budget recommendations, focus on scalability and long-term growth
-    - For low-budget recommendations, focus on efficiency and essential priorities
+    TOOL USAGE RULES:
+    - Use vector_search for funding/VC insights (max 2 times)
+    - Use web_search for current market conditions (max 2 times)
+    - Always proceed to final_recommendations after gathering sufficient information
+    - Never use the same query twice
 
-    Do NOT use any tool more than twice.
-
-    Once you have collected sufficient information from various tools, use the final_recommendations tool to produce your comprehensive report.
+    CRITICAL: Your final output MUST use the final_recommendations tool with ALL six required parameters listed above. Do not make more than 6 total tool calls before submitting your final report.
     """
 
     prompt = ChatPromptTemplate.from_messages([
@@ -247,6 +234,7 @@ def router(state: SummaryAgentState):
 def run_tool(state: SummaryAgentState):
     tool_str_to_func = {
         "web_search": web_search,
+        "vector_search": vector_search,
         "final_recommendations": final_recommendations
     }
     
@@ -270,15 +258,14 @@ def run_tool(state: SummaryAgentState):
 ## Langraph - Designing the Graph
 def create_graph(summary_agent):
     # tools = [vector_search, web_search, snowflake_real_estate, final_recommendations]
-    tools = [web_search, final_recommendations]
+    tools = [web_search, final_recommendations, vector_search]
 
     graph = StateGraph(SummaryAgentState)
 
     # Pass state to all functions that require it
     graph.add_node("oracle", partial(run_oracle, oracle=summary_agent))
-    # graph.add_node("vector_search", run_tool)
+    graph.add_node("vector_search", run_tool)
     graph.add_node("web_search", run_tool)
-    # graph.add_node("snowflake_real_estate", run_tool)
     graph.add_node("final_recommendations", run_tool)
 
     graph.set_entry_point("oracle")
