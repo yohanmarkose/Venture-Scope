@@ -745,33 +745,31 @@ def main():
                 experts = [
                     {
                         "name": "Ben Horowitz",
-                        "img": "https://pdfparserdataset.s3.us-east-2.amazonaws.com/chatbot_source_books/a16z/benhorowitz.png",
+                        "img": "https://pdfparserdataset.s3.us-east-2.amazonaws.com/chatbot_source_books/BenHorowitz/benhorowitz.png",
                         "bio": "Co-founder of Andreessen Horowitz. Pioneer in venture capital with deep expertise in tech entrepreneurship and startup leadership.",
-                        "key": "benhorowitz",
+                        "key": "BenHorowitz",
                         "base_info": "You are Ben Horowitz — co-founder of Andreessen Horowitz and one of Silicon Valley's most respected voices on entrepreneurship, leadership, and culture in high-growth startups. You respond with directness, candor, and personal insight drawn from years of experience building and backing companies. Your tone is authentic, no-nonsense, and occasionally humorous or anecdotal — especially when discussing hard truths of startup life.",
-                        "namespace": "a16z"
                     },
                     {
                         "name": "Mark Cuban",
                         "img": "https://pdfparserdataset.s3.us-east-2.amazonaws.com/chatbot_source_books/MarkCuban/MarkCuban.png",
                         "bio": "Billionaire entrepreneur and investor. Owner of the Dallas Mavericks with distinctive perspectives on business innovation and growth.",
-                        "key": "markcuban",
+                        "key": "MarkCuban",
                         "base_info": "You are Mark Cuban — self-made billionaire, media personality, and sharp-tongued investor known for speaking his mind. As owner of the Dallas Mavericks and one of the most vocal sharks on *Shark Tank*, you combine tech-savvy thinking with real-world grit. Your style is blunt, confident, and relentless, always pushing entrepreneurs to know their numbers, grind harder, and outwork everyone in the room.",
-                        "namespace": "markcuban"
                     },
                     {
                         "name": "Reed Hastings",
                         "img": "https://pdfparserdataset.s3.us-east-2.amazonaws.com/chatbot_source_books/ReedHastings/ReedHastings.webp",
                         "bio": "Co-founder of Netflix. Visionary in technology and organizational culture with expertise in scaling consumer-focused platforms.",
-                        "key": "reedhastings",
+                        "key": "ReedHastings",
                         "base_info": "You are Reed Hastings — co-founder of Netflix and a pioneer in using technology and company culture to scale consumer platforms. Your insights are grounded in experimentation, data, and empowering people. You speak with calm precision, emphasizing vision, discipline, and innovation over hype.",
                         "namespace": "reedhastings"
                     },
                     {
                         "name": "Sam Walton",
-                        "img": "https://pdfparserdataset.s3.us-east-2.amazonaws.com/chatbot_source_books/walmart/SamWalton.png",
+                        "img": "https://pdfparserdataset.s3.us-east-2.amazonaws.com/chatbot_source_books/SamWalton/SamWalton.png",
                         "bio": "Founder of Walmart. Retail innovator who revolutionized American commerce through strategic expansion and operational excellence.",
-                        "key": "samwalton",
+                        "key": "SamWalton",
                         "base_info": "You are Sam Walton — founder of Walmart and a visionary in American retail. You built an empire on principles of low prices, customer satisfaction, rural expansion, and operational excellence. You speak plainly and practically, often emphasizing hard work, frugality, and putting the customer first. Your tone is humble, folksy, and grounded in real-world business experience, often enriched with anecdotes from building Walmart from the ground up.",
                         "namespace": "samwalton"
                     }
@@ -816,7 +814,6 @@ def main():
                     if expert_question:
                         payload = {
                             "expert_key": expert["key"],
-                            "namespace": expert["namespace"],
                             "question": expert_question,
                             "base_info": expert["base_info"],
                             "model": "gpt-4.o-mini"

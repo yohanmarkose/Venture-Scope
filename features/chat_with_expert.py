@@ -9,7 +9,6 @@ from tavily import TavilyClient
 
 class ExpertChatRequest(BaseModel):
     expert_key: str
-    namespace: str
     question: str
     base_info: str
     model: str = "gpt-4o-mini"
@@ -17,16 +16,24 @@ class ExpertChatRequest(BaseModel):
 llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
 tavily = TavilyClient(api_key=os.getenv("TAVILY_API_KEY"))
 
-def make_pinecone_tool(namespace):
+def make_pinecone_tool(expert_key):
     def tool_func(query: str):
-        matches = query_pinecone(query, namespace=namespace, top_k=5)
+        matches = query_pinecone(query, namespace=expert_key, top_k=5)
         return "\n\n".join([m["metadata"]["text"] for m in matches if "text" in m.get("metadata", {})])
     return tool_func
 
 def make_web_search_tool(expert_key):
-    if expert_key == "benhorowitz":
+    if expert_key == "BenHorowitz":
         domain="https://a16z.com/news-content/"
         return lambda query: strict_domain_web_search(query, domain)
+    elif expert_key == "MarkCuban":
+        domain="https://blogmaverick.com/"
+        return lambda query: strict_domain_web_search(query, domain)
+    elif expert_key == "ReedHastings":
+        domain="https://www.msn.com/"
+        return lambda query: strict_domain_web_search(query, domain)
+    elif expert_key == "SamWalton":
+        return None
     return None
 
 def strict_domain_web_search(query, domain):
@@ -56,7 +63,7 @@ def chat_with_expert_endpoint(request: ExpertChatRequest):
         tools = [
             Tool(
                 name="book_knowledge",
-                func=make_pinecone_tool(request.namespace),
+                func=make_pinecone_tool(request.expert_key),
                 description="Use for questions based on the expert's published work."
             )
         ]
