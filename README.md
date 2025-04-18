@@ -2,6 +2,27 @@
 
 Venture Scope is a comprehensive business intelligence platform designed to help entrepreneurs and businesses make data-driven decisions about market opportunities, location intelligence, and competitor analysis. The platform integrates advanced analytics, machine learning, and natural language processing to provide actionable insights.
 
+## Project Overview
+
+To create a comprehensive startup advisory system, the project integrates data from Free Company Dataset (Snowflake) combining with yfinance to fetch financial side of data for available companies. Along with MCP-integration of google maps to figure out the rich details on the ideal or potential locations for the user. These reports are supported by Q&A agents along with VC investment quarterly reports to address and serve as a platform that will provide users with a base for questing and analyzing his interest in specified business domains, company size parameters, and location preferences to generate tailored recommendations and insights.
+
+## Deployed Links
+
+- [Streamlit](https://venture-scope.streamlit.app/?embed_options=light_theme)
+
+- [FastAPI](https://venture-scope-969760129380.us-central1.run.app)
+
+- [Airflow](http://34.31.90.252:8080/home)
+
+- [Codelabs](https://codelabs-preview.appspot.com/?file_id=1BaeKci7nt9ODAldre-vneEculW-P1jrT8MIS0doFl_s#11)
+
+- [Project Document](https://docs.google.com/document/d/1BaeKci7nt9ODAldre-vneEculW-P1jrT8MIS0doFl_s/edit?tab=t.0)
+
+## Architecture Diagram
+![architecture_diagram](https://github.com/user-attachments/assets/28b256b1-4322-4d50-9c11-8f639febc9a8)
+
+
+
 ## Features
 
 - **Market Analysis**: Gain insights into market trends, consumer behavior, and growth opportunities.
@@ -9,20 +30,12 @@ Venture Scope is a comprehensive business intelligence platform designed to help
 - **Competitor Analysis**: Understand competitors' strengths and weaknesses to develop effective strategies.
 - **Q&A Chatbot**: Ask questions about your business analysis and get personalized answers.
 - **Expert Chat**: Interact with virtual representations of industry experts for advice and insights.
-
-## Project Structure
-├── airflow/          # Airflow DAGs and services for orchestrating data pipelines
-├── backend/          # FastAPI-based backend APIs and external service integrations
-├── features/         # Core business logic, AI agents, and decision-making workflows
-├── frontend/         # Streamlit-based user interface for interacting with the platform
-├── prototype/        # Experimental features, sandbox agents, and research code
-└── services/         # Shared utility modules (e.g., S3, Pinecone, embeddings, OCR)
  
 ## Getting Started
 
 ### Prerequisites
 
-- Python 3.8+
+- Python 3.10+
 - Docker
 - Node.js (for MCP server if required)
 - AWS credentials for S3 integration
