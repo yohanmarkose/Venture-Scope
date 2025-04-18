@@ -146,8 +146,8 @@ def final_answer(
     Returns a comprehensive market analysis report for the specified industry.
     
     Args:
-        market_players: Markdown table of top 5 companies from snowflake_query
-        - Display all the columns in the table including linked in column
+        market_players: Markdown table of top 5 companies from snowflake_query,
+        - Display the columns: 'COMPANY_NAME', 'FOUNDED', 'COMPANY_AGE', 'SIZE', 'WEBSITE', 'LINKEDIN_URL', 'REGION'
         - Title case the company names and format the table in markdown
         
         competitor_details: With company name as heading (Title case) and corresponding website link just below, give a detailed breakdown for each company 
