@@ -48,7 +48,23 @@ jobs:
           --region $REGION \
           --allow-unauthenticated \
           --port 8000 \
-          --set-env-vars="XAI_API_KEY=${{ secrets.XAI_API_KEY }},OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }},SNOWFLAKE_USER=${{ secrets.SNOWFLAKE_USER }},SNOWFLAKE_PASSWORD=${{ secrets.SNOWFLAKE_PASSWORD }},SNOWFLAKE_ACCOUNT=${{ secrets.SNOWFLAKE_ACCOUNT }},SNOWFLAKE_WAREHOUSE=${{ secrets.SNOWFLAKE_WAREHOUSE }},SNOWFLAKE_DATABASE=${{ secrets.SNOWFLAKE_DATABASE }},SNOWFLAKE_SCHEMA=${{ secrets.SNOWFLAKE_SCHEMA }}"
+          --set-env-vars="GOOGLE_MAPS_API_KEY=${{ secrets.GOOGLE_MAPS_API_KEY }},
+                          OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }},
+                          SNOWFLAKE_USER=${{ secrets.SNOWFLAKE_USER }},
+                          SNOWFLAKE_PASSWORD=${{ secrets.SNOWFLAKE_PASSWORD }},
+                          SNOWFLAKE_ACCOUNT=${{ secrets.SNOWFLAKE_ACCOUNT }},
+                          SNOWFLAKE_WAREHOUSE=${{ secrets.SNOWFLAKE_WAREHOUSE }},
+                          SNOWFLAKE_ROLE=${{ secrets.SNOWFLAKE_ROLE }},
+                          SNOWFLAKE_DATABASE=${{ secrets.SNOWFLAKE_DATABASE }},
+                          SNOWFLAKE_SCHEMA=${{ secrets.SNOWFLAKE_SCHEMA }}
+                          GOOGLE_SEARCH_ENGINE_ID=${{ secrets.GOOGLE_SEARCH_ENGINE_ID }},
+                          GOOGLE_API_KEY=${{ secrets.GOOGLE_API_KEY }},
+                          PINECONE_API_KEY=${{ secrets.PINECONE_API_KEY }},
+                          PINECONE_INDEX=${{ secrets.PINECONE_INDEX }},
+                          AWS_BUCKET_NAME=${{ secrets.AWS_BUCKET_NAME }},
+                          AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }},
+                          AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }},
+                          TAVILY_API_KEY=${{ secrets.TAVILY_API_KEY }}"
     
     - name: Show deployed service URL
       run: echo "Service deployed to ${{ steps.deploy.outputs.url }}"
