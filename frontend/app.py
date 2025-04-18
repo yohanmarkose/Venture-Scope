@@ -181,7 +181,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # API endpoint
-API_URL = "http://localhost:8000"
+API_URL = "https://venture-scope-969760129380.us-central1.run.app"
 
 @st.cache_data
 def load_cities():
@@ -923,7 +923,7 @@ def main():
                     
             
             # Add a button to start a new analysis
-            if st.button("Start New Analysis", type="primary"):
+            if st.button("Start New Analysis", type="primary", use_container_width=True):
                 st.session_state.submitted = False
                 st.session_state.api_results = None
                 st.session_state.products = []
