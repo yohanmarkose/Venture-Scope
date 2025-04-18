@@ -19,7 +19,8 @@ st.set_page_config(
     page_title="Venture Scope | Business Location Intelligence",
     page_icon="🌎",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="expanded",
+    theme="light"
 )
 
 # Custom CSS for styling to match mockups
@@ -731,7 +732,6 @@ def main():
                             st.error(traceback.format_exc())
                     
             with location_intelligence:
-                st.markdown('<div class="section-header">Q & A</div>', unsafe_allow_html=True)
                 if "locations" in location_data:
                     display_locations(location_data.get("locations", []))
                 else:
