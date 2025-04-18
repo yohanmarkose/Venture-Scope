@@ -20,6 +20,7 @@ from features.qa_agent import run_chatbot
 import warnings
 from services.s3 import S3FileManager
 from features.chat_with_expert import ExpertChatRequest, chat_with_expert_endpoint
+from features.summary_agent import run_summary_agent
 
 load_dotenv()
 
@@ -269,6 +270,49 @@ def convert_report_to_markdown(report_dict):
 {sources}
 """ 
     return markdown_report
+
+
+def convert_summary_report_to_markdown(report_dict):
+    try:
+        # Parse the report if it's a string
+        if isinstance(report_dict, str):
+            report_dict = json.loads(report_dict)
+        
+        markdown = []
+        
+        # Add Executive Summary
+        markdown.append("# Executive Summary")
+        markdown.append(report_dict.get("executive_summary", ""))
+        markdown.append("")
+        
+        # Add Market Analysis Insights
+        markdown.append("## Market Analysis Insights")
+        markdown.append(report_dict.get("market_analysis_insights", ""))
+        markdown.append("")
+        
+        # Add Location Recommendations
+        markdown.append("## Location Recommendations")
+        markdown.append(report_dict.get("location_recommendations", ""))
+        markdown.append("")
+        
+        # Add Action Steps
+        markdown.append("## Action Steps")
+        markdown.append(report_dict.get("action_steps", ""))
+        markdown.append("")
+        
+        # Add Risk Assessment
+        markdown.append("## Risk Assessment")
+        markdown.append(report_dict.get("risk_assessment", ""))
+        markdown.append("")
+        
+        # Add Resource Recommendations
+        markdown.append("## Resource Recommendations")
+        markdown.append(report_dict.get("resource_recommendations", ""))
+        
+        return "\n".join(markdown)
+    except Exception as e:
+        print(f"Error converting report to markdown: {str(e)}")
+        return f"Error formatting report: {str(e)}"
     
 
 def get_graph(industry):
@@ -494,6 +538,63 @@ def question_and_analysis(query: QuestionRequest):
         print(f"Error in question_and_analysis: {str(e)}")
         print(traceback.format_exc())
         raise HTTPException(status_code=500, detail=f"Error answering question: {str(e)}")
+    
+
+@app.post("/summary_recommendations")
+def final_analysis(query: SummaryRecommendation):
+    try:
+        formatted_query = {
+            "industry": query.industry,
+            "product": ", ".join(query.product),
+            "location_city": ", ".join(query.location_city),
+            "budget": f"{query.budget[0]} - {query.budget[1]}",
+            "size": query.size,
+            "unique_selling_proposition": query.unique_selling_proposition or ""
+        }
+
+        base_path = base_path = f"users/temp/"
+        s3_obj = S3FileManager(AWS_BUCKET_NAME, base_path)
+        file = f"{base_path}market_analysis.md"
+        market_analysis_output = s3_obj.load_s3_file_content(file)
+
+        # base_path = base_path = f"users/temp/"
+        # s3_obj = S3FileManager(AWS_BUCKET_NAME, base_path)
+        # file = f"{base_path}location_analysis.md"
+        # location_analysis_output = s3_obj.load_s3_file_content(file)
+
+        location_analysis_output = ", ".join(query.location_city)
+
+        industry = classify_industry(formatted_query["industry"], formatted_query["product"])
+        print("Industry selected is:", industry)
+
+        runnable = run_summary_agent(industry, formatted_query["location_city"], formatted_query["budget"],
+                     market_analysis_output, location_analysis_output)
+        out = runnable.invoke({ 
+            "chat_history": [],
+            "industry": industry,
+            "location": formatted_query["location_city"],
+            "budget_level": formatted_query["budget"],
+            "market_analysis_output": market_analysis_output,
+            "location_intelligence_output": location_analysis_output,
+            "intermediate_steps": []
+        }, config={"recursion_limit": 70}) 
+        
+        answer = out["intermediate_steps"][-1].tool_input
+        markdown_report = convert_summary_report_to_markdown(answer)
+        
+        print("Final recommendations:\n", markdown_report)
+        
+        return {
+            "answer": markdown_report,
+            "industry": industry,
+            "location": formatted_query["location_city"],
+            "budget_level": formatted_query["budget"]
+        }
+    
+    except Exception as e:
+        print(f"Error in summary recommendations: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error generating recommendations: {str(e)}")
+    
 
 @app.post("/chat_with_expert")
 def chat_with_expert(request: ExpertChatRequest):

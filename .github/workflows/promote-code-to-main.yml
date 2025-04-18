@@ -2,9 +2,12 @@ name: Promote to Main
 
 on:
   workflow_run:
-    workflows: ["Test Backend"]
+    workflows: ["Venture-Scope Testing"]  # Must match EXACTLY the name in your testing workflow
     branches: [dev]
     types: [completed]
+
+permissions:
+  contents: write  # Needed for pushing to branches
 
 jobs:
   promote:
@@ -14,8 +17,8 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
-          ref: main
+          fetch-depth: 0  # Need full history for merge
+          token: ${{ secrets.GITHUB_TOKEN }}  # Use this or a personal access token
           
       - name: Configure Git
         run: |
@@ -24,6 +27,7 @@ jobs:
           
       - name: Merge dev into main
         run: |
-          git fetch origin dev
-          git merge origin/dev --no-ff -m "Auto-merge dev into main"
+          git checkout main
+          git pull
+          git merge --no-ff origin/dev -m "Auto-merge dev into main"
           git push
