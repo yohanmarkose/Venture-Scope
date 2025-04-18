@@ -89,7 +89,7 @@ async def run_location_intelligence(mcp_server: MCPServer, query: str):
     synthesizer_agent = Agent(
         name="synthesizer_agent",
         instructions="""You take the input and then output one JSON object (locations, competitors) without the ticks to pass it to our API for processing. 
-                        Strictly use JSON format for competitors. Strictly use JSON format for the ideal locations.
+                        Strictly use JSON format for the ideal locations. Strictly use JSON format for the competitors. Valid JSON format {locations: [], competitors: []}.
                         JSON formatted keys should be in snake_case.""",
         model = "gpt-4o-mini",
     )
