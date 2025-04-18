@@ -11,9 +11,8 @@ from services.mistral_orc_processing import pdf_mistralocr_converter
 from services.chunk_strategy import semantic_chunking
 from services.vector_store import create_pinecone_vector_store
 
-
 @dag(
-    dag_id='chatboats_personalities_source_parser_once',
+    dag_id='chatbots_personalities_source_parser_once',
     default_args={
         'owner': 'airflow',
         'start_date': days_ago(1),
@@ -21,7 +20,7 @@ from services.vector_store import create_pinecone_vector_store
     },
     schedule_interval='@once',
     catchup=False,
-    tags=["vc_reports", "ocr", "markdown", "chatboats"],
+    tags=["ocr", "markdown", "chatbots","pinecone"],
     max_active_runs=1,
     max_active_tasks=2
 )
@@ -29,7 +28,7 @@ def process_existing_pdfs():
 
     @task
     def get_s3_pdfs():
-        return json.loads(Variable.get("CHATBOT_SOURCE_PDF_FILES", default_var='["chatbot_source_books/a16z/BenHorowit.pdf"]'))
+        return json.loads(Variable.get("CHATBOT_SOURCE_PDF_FILES", default_var='["chatbot_source_books/BenHorowitz/BenHorowit_a16z_TheHardThingAboutHardThings.pdf"]'))
 
     @task
     def process_and_index(s3_path: str) -> str:
