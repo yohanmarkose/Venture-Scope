@@ -70,6 +70,27 @@ def insert_data_into_pinecone():
     base_path = "nvca-pdfs"
     s3_obj = S3FileManager(AWS_BUCKET_NAME, base_path)
 
+def query_pinecone(query, top_k=10, year = "2024", quarter = ["Q4"]):
+    # Search the dense index and rerank the results
+    index = connect_to_pinecone_index()
+    dense_vector = get_embedding(query)
+    results = index.query(
+        namespace=f"nvdia_quarterly_reports",
+        vector=dense_vector,  # Dense vector embedding
+        filter={
+            "year": {"$eq": year},
+            "quarter": {"$in": quarter},
+        },  # Sparse keyword match
+        top_k=top_k,
+        include_metadata=True,  # Include chunk text
+    )
+    responses = []
+    for match in results["matches"]:
+        print(f"ID: {match['id']}, Score: {match['score']}")
+        # print(f"Chunk: {match['metadata']['text']}\n")
+        responses.append(match['metadata']['text'])
+        print("=================================================================================")
+    return responses
 
 def main():
     # Initialize Pinecone
