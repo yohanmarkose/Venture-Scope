@@ -634,7 +634,8 @@ def main():
             # Call the API
             api_calls = [
                 ("market_analysis", "market_analysis", data),
-                # ("location_intelligence", "location_intelligence", data)
+                ("location_intelligence", "location_intelligence", data)
+
             ]
             
             with st.spinner():
@@ -657,7 +658,7 @@ def main():
     if st.session_state.submitted and st.session_state.api_results:
         
         market_data = st.session_state.api_results.get("market_analysis", {})
-        # location_data = st.session_state.api_results.get("location_intelligence", {})
+        location_data = st.session_state.api_results.get("location_intelligence", {})
         
         # if "error" in location_data:
         #     st.error(f"Error retrieving data: {location_data['error']}")
@@ -673,7 +674,7 @@ def main():
             """, unsafe_allow_html=True)
             
             # Display tabs that match the mockups
-            market_analysis, location_intelligence, summary_recommendations, qa_tab, chat_with_experiance = st.tabs([
+            market_analysis, location_intelligence, summary_recommendations, qa_tab, chat_with_experience = st.tabs([
                 "📊 Market Analysis", 
                 "🗺️ Location Intelligence",
                 "📋 Summary & Recommendations",
@@ -728,18 +729,119 @@ def main():
                             st.error(traceback.format_exc())
                     
             with location_intelligence:
-                pass
-                # if "locations" in location_data:
-                #     display_locations(location_data.get("locations", []))
-                # else:
-                #     st.warning("No location data available.")
-                # if "competitors" in location_data:
-                #     display_competitors(location_data.get("competitors", []))
-                # else:
-                #     st.warning("No competitor data available.")
+                st.markdown('<div class="section-header">Q & A</div>', unsafe_allow_html=True)
+                if "locations" in location_data:
+                    display_locations(location_data.get("locations", []))
+                else:
+                    st.warning("No location data available.")
+                if "competitors" in location_data:
+                    display_competitors(location_data.get("competitors", []))
+                else:
+                    st.warning("No competitor data available.")
             
-            with chat_with_experiance:
-                pass
+            with chat_with_experience:
+                st.markdown('<div class="section-header">💬 Chat with Industry Experts - Ask them about their stories</div>', unsafe_allow_html=True)
+
+                experts = [
+                    {
+                        "name": "Ben Horowitz",
+                        "img": "https://pdfparserdataset.s3.us-east-2.amazonaws.com/chatbot_source_books/BenHorowitz/benhorowitz.png",
+                        "bio": "Co-founder of Andreessen Horowitz. Pioneer in venture capital with deep expertise in tech entrepreneurship and startup leadership.",
+                        "key": "BenHorowitz",
+                        "base_info": "You are Ben Horowitz — co-founder of Andreessen Horowitz and one of Silicon Valley's most respected voices on entrepreneurship, leadership, and culture in high-growth startups. You respond with directness, candor, and personal insight drawn from years of experience building and backing companies. Your tone is authentic, no-nonsense, and occasionally humorous or anecdotal — especially when discussing hard truths of startup life.",
+                    },
+                    {
+                        "name": "Mark Cuban",
+                        "img": "https://pdfparserdataset.s3.us-east-2.amazonaws.com/chatbot_source_books/MarkCuban/MarkCuban.png",
+                        "bio": "Billionaire entrepreneur and investor. Owner of the Dallas Mavericks with distinctive perspectives on business innovation and growth.",
+                        "key": "MarkCuban",
+                        "base_info": "You are Mark Cuban — self-made billionaire, media personality, and sharp-tongued investor known for speaking his mind. As owner of the Dallas Mavericks and one of the most vocal sharks on *Shark Tank*, you combine tech-savvy thinking with real-world grit. Your style is blunt, confident, and relentless, always pushing entrepreneurs to know their numbers, grind harder, and outwork everyone in the room.",
+                    },
+                    {
+                        "name": "Reed Hastings",
+                        "img": "https://pdfparserdataset.s3.us-east-2.amazonaws.com/chatbot_source_books/ReedHastings/ReedHastings.webp",
+                        "bio": "Co-founder of Netflix. Visionary in technology and organizational culture with expertise in scaling consumer-focused platforms.",
+                        "key": "ReedHastings",
+                        "base_info": "You are Reed Hastings — co-founder of Netflix and a pioneer in using technology and company culture to scale consumer platforms. Your insights are grounded in experimentation, data, and empowering people. You speak with calm precision, emphasizing vision, discipline, and innovation over hype.",
+                        "namespace": "reedhastings"
+                    },
+                    {
+                        "name": "Sam Walton",
+                        "img": "https://pdfparserdataset.s3.us-east-2.amazonaws.com/chatbot_source_books/SamWalton/SamWalton.png",
+                        "bio": "Founder of Walmart. Retail innovator who revolutionized American commerce through strategic expansion and operational excellence.",
+                        "key": "SamWalton",
+                        "base_info": "You are Sam Walton — founder of Walmart and a visionary in American retail. You built an empire on principles of low prices, customer satisfaction, rural expansion, and operational excellence. You speak plainly and practically, often emphasizing hard work, frugality, and putting the customer first. Your tone is humble, folksy, and grounded in real-world business experience, often enriched with anecdotes from building Walmart from the ground up.",
+                        "namespace": "samwalton"
+                    }
+                ]
+
+                if 'selected_expert' not in st.session_state:
+                    st.session_state.selected_expert = None
+                if 'expertchat_history' not in st.session_state:
+                    st.session_state.expertchat_history = []
+
+                # Display expert cards
+                cols = st.columns(4)
+                for i, expert in enumerate(experts):
+                    with cols[i]:
+                        # Start the card container
+                        st.markdown(f"""
+                            <div style="text-align:center; padding:20px; background-color:#f9fafb; border-radius:16px; box-shadow:0 2px 8px rgba(0,0,0,0.05); height:100%; display:flex; flex-direction:column; justify-content:space-between;">
+                                <div>
+                                    <img src="{expert['img']}" alt="{expert['name']}" style="border-radius:50%; width:90px; height:90px; object-fit:cover; margin-bottom:10px;" />
+                                    <div style="font-weight:600; font-size:16px; margin-top:5px;">{expert['name']}</div>
+                                    <p style="font-size:13px; color:#555; min-height:80px;">{expert['bio']}</p>
+                                </div>
+                        """, unsafe_allow_html=True)
+                        
+                        # Add button container within the card
+                        st.markdown('<div style="margin-top:10px;">', unsafe_allow_html=True)
+                        
+                        # Insert the Streamlit button
+                        if st.button("Chat", key=f"chat_{expert['key']}", use_container_width=True):
+                            st.session_state.selected_expert = expert
+                            st.session_state.expertchat_history = []
+
+                        st.markdown("</div>", unsafe_allow_html=True)
+
+                # Chat section
+                if st.session_state.selected_expert:
+                    expert = st.session_state.selected_expert
+                    st.markdown(f"<hr><h4>🧠 Chat with {expert['name']}</h4>", unsafe_allow_html=True)
+
+                    with st.form("expert_chat_form", clear_on_submit=True):
+                        expert_question = st.text_input("Ask a question:", key="expert_user_input")
+                        send_button = st.form_submit_button("Send")
+
+                        if send_button and expert_question:
+                            payload = {
+                                "expert_key": expert["key"],
+                                "question": expert_question,
+                                "base_info": expert["base_info"],
+                                "model": "gpt-4.o-mini"
+                            }
+
+                            with st.spinner("Thinking..."):
+                                try:
+                                    res = requests.post(f"{API_URL}/chat_with_expert", json=payload)
+                                    if res.status_code == 200:
+                                        answer = res.json()["answer"]
+                                        st.session_state.expertchat_history.append({"expert": expert["name"],"question": expert_question,"answer": answer})
+                                        st.success(answer)
+                                    else:
+                                        st.error(f"❌ {res.status_code}: {res.text}")
+                                except Exception as e:
+                                    st.error(f"API error: {str(e)}")
+
+                    # Show chat history
+                    if st.session_state.expertchat_history:
+                        st.markdown("### 💬 Chat History")
+                        for chat in st.session_state.expertchat_history[::-1]:
+                            st.markdown(f"🧠 **{chat['expert']}**")
+                            st.markdown(f"**Q:** {chat['question']}")
+                            st.markdown(f"**A:** {chat['answer']}")
+                            st.markdown("---")
+
 
             with qa_tab:
                 st.markdown('<div class="section-header">Q & A</div>', unsafe_allow_html=True)
@@ -868,8 +970,8 @@ def main():
                 <p style="color:#64748b;">Understand your competition's strengths and weaknesses to develop effective strategies.</p>
             </div>
             """, unsafe_allow_html=True)
-    
-    # Page footer
+
+    # Footer
     st.markdown("""
     <div class="footer">
         <p>Venture Scope | Business Location Intelligence Platform</p>

@@ -1,6 +1,6 @@
 import io, os, time, base64, asyncio, json
 from io import BytesIO
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException , APIRouter
 from pydantic import BaseModel, Field
 from typing import List, Dict, Any, Optional, Tuple, Union
 from features.mcp.google_maps.location_intelligence import start_location_intelligence
@@ -447,7 +447,7 @@ async def location_intelligence(query: BusinessQuery):
     
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error processing location intelligence: {str(e)}")
-    
+
 
 active_chatbots = {}
 @app.post("/q_and_a")
@@ -592,3 +592,8 @@ def final_analysis(query: SummaryRecommendation):
         print(f"Error in summary recommendations: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error generating recommendations: {str(e)}")
     
+from features.chat_with_expert import ExpertChatRequest, chat_with_expert_endpoint
+
+@app.post("/chat_with_expert")
+def chat_with_expert(request: ExpertChatRequest):
+    return chat_with_expert_endpoint(request)
