@@ -7,51 +7,84 @@ from pathlib import Path
 from io import BytesIO
 from services.s3 import S3FileManager
 from services.mistral_orc_processing import pdf_mistralocr_converter
+from services.vector_store import upsert_vectors
+from services.chunk_strategy import semantic_chunking
+from services.vector_store import get_embedding
+import uuid
+import json
 
 @task
 def get_input_files(**context):
-    conf = context["dag_run"].conf
-    base_path = conf.get("base_path")
-    pdf_files = conf.get("pdf_files")
+    states = json.loads(Variable.get("VC_STATE_LIST"))
+    base_root = "nvca-pdfs"
+    file_name = "extracted_data.md"
 
-    if not base_path or not pdf_files:
-        raise ValueError("Missing required params: base_path or pdf_files")
-
-    return [{"base_path": base_path, "file_name": f} for f in pdf_files]
+    return [
+        {"base_path": f"{base_root}/{state}/mistral", "file_name": file_name}
+        for state in states
+    ]
 
 @task
-def process_single_pdf(file_info: dict):
+def get_existing_markdown_file(file_info: dict) -> str:
     base_path = file_info["base_path"]
     file_name = file_info["file_name"]
 
     AWS_BUCKET_NAME = Variable.get("AWS_BUCKET_NAME")
-    s3 = S3Hook(aws_conn_id="aws_default")
     full_key = f"{base_path}/{file_name}"
 
-    # Download PDF from S3
-    print(f"⬇️ Downloading: s3://{AWS_BUCKET_NAME}/{full_key}")
-    pdf_bytes = BytesIO()
-    s3.get_key(full_key, bucket_name=AWS_BUCKET_NAME).download_fileobj(pdf_bytes)
-    pdf_bytes.seek(0)
+    # Optional: Check if file exists in S3
+    s3 = S3Hook(aws_conn_id="aws_default")
+    if not s3.check_for_key(full_key, bucket_name=AWS_BUCKET_NAME):
+        raise FileNotFoundError(f"❌ Markdown file not found: s3://{AWS_BUCKET_NAME}/{full_key}")
 
-    # Run Mistral OCR
-    s3_obj = S3FileManager(AWS_BUCKET_NAME, base_path)
-    output_path = f"{base_path}/mistral/{Path(file_name).stem}"
-    md_file, content = pdf_mistralocr_converter(pdf_bytes, output_path, s3_obj)
+    print(f"📄 Using existing markdown: s3://{AWS_BUCKET_NAME}/{full_key}")
+    return full_key
 
-    print(f"✅ Processed and saved Markdown to: {md_file}")
-    return md_file
+# ─── Task 3: Push to Pinecone ───────────────────────────────────────────────
+from services.vector_store import connect_to_pinecone_index
+@task
+def push_to_pinecone(markdown_file_path: str):
+    print(f"📄 Embedding and uploading: {markdown_file_path}")
 
+    s3_obj = S3FileManager(Variable.get("AWS_BUCKET_NAME"), markdown_file_path)
+    content = s3_obj.load_s3_file_content(markdown_file_path)
+    if not content:
+        print(f"⚠️ Empty content in {markdown_file_path}, skipping.")
+        return
+
+    state = Path(markdown_file_path).parts[2] if len(Path(markdown_file_path).parts) > 2 else "unknown"
+    file_name = Path(markdown_file_path).stem
+
+    chunks = semantic_chunking(content, max_sentences=5)
+    print(f"🔍 Created {len(chunks)} semantic chunks.")
+
+    docs = [
+        {
+            "id": f"{state}_{file_name}_chunk_{i}_{str(uuid.uuid4())[:8]}",
+            "values": get_embedding(chunk),
+            "metadata": {
+                "state": state,
+                "source_file": markdown_file_path,
+                "chunk_id": i,
+                "text_preview": chunk[:150]
+            }
+        }
+        for i, chunk in enumerate(chunks)
+    ]
+
+    index = connect_to_pinecone_index()
+    upsert_vectors(index, docs, namespace='nvdia_quarterly_reports')
+    print(f"✅ Uploaded {len(docs)} vectors for `{state}`")
 
 with DAG(
     dag_id="ocr_from_s3_selected_files_once",
     start_date=days_ago(1),
     schedule_interval=None,
     catchup=False,
-    tags=["vc_reports", "scraping", "markdown",'venture-scope'],
+    tags=["vc_reports", "scraping", "markdown", "venture-scope"],
     max_active_runs=1,
     max_active_tasks=1
 ) as dag:
-
     input_files = get_input_files()
-    process_single_pdf.expand(file_info=input_files)
+    markdown_files = get_existing_markdown_file.expand(file_info=input_files)
+    push_to_pinecone.expand(markdown_file_path=markdown_files)

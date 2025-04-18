@@ -12,7 +12,7 @@ from langchain_core.messages import ToolCall, ToolMessage
 from langchain_openai import ChatOpenAI
 from functools import partial
 from features.snowflake_analysis import SnowflakeConnector
-from features.vecotre_db.pinecone_index import query_pinecone
+from features.vector_db.pinecone_index import query_pinecone
 
 from tavily import TavilyClient
 

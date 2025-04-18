@@ -32,7 +32,7 @@ AWS_BUCKET_NAME = os.getenv("AWS_BUCKET_NAME")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 
-INDUSTRIES = [
+INDUSTRIES = [ 
     "accounting",
     "airlines/aviation",
     "alternative dispute resolution",
