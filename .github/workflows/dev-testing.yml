@@ -24,7 +24,7 @@ jobs:
         python -m pip install --upgrade pip
         pip install pytest pytest-mock
         if [ -f backend/requirements.txt ]; then pip install -r backend/requirements.txt; fi
-        pip install fastapi httpx pandas plotly langchain-core openai pytest-mock snowflake-connector-python
+        pip install fastapi httpx pandas plotly langchain-core openai pytest-mock snowflake-connector-python python-dotenv
         
     - name: Create mock environment variables for testing
       run: |
