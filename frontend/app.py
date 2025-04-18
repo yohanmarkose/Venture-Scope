@@ -809,35 +809,39 @@ def main():
                     expert = st.session_state.selected_expert
                     st.markdown(f"<hr><h4>🧠 Chat with {expert['name']}</h4>", unsafe_allow_html=True)
 
-                    expert_question = st.text_input("Ask a question:", key="user_input")
+                    with st.form("expert_chat_form", clear_on_submit=True):
+                        expert_question = st.text_input("Ask a question:", key="expert_user_input")
+                        send_button = st.form_submit_button("Send")
 
-                    if expert_question:
-                        payload = {
-                            "expert_key": expert["key"],
-                            "question": expert_question,
-                            "base_info": expert["base_info"],
-                            "model": "gpt-4.o-mini"
-                        }
+                        if send_button and expert_question:
+                            payload = {
+                                "expert_key": expert["key"],
+                                "question": expert_question,
+                                "base_info": expert["base_info"],
+                                "model": "gpt-4.o-mini"
+                            }
 
-                        with st.spinner("Thinking..."):
-                            try:
-                                res = requests.post(f"{API_URL}/chat_with_expert", json=payload)
-                                if res.status_code == 200:
-                                    answer = res.json()["answer"]
-                                    st.session_state.expertchat_history.append((expert_question, answer))
-                                    st.success(answer)
-                                else:
-                                    st.error(f"❌ {res.status_code}: {res.text}")
-                            except Exception as e:
-                                st.error(f"API error: {str(e)}")
+                            with st.spinner("Thinking..."):
+                                try:
+                                    res = requests.post(f"{API_URL}/chat_with_expert", json=payload)
+                                    if res.status_code == 200:
+                                        answer = res.json()["answer"]
+                                        st.session_state.expertchat_history.append({"expert": expert["name"],"question": expert_question,"answer": answer})
+                                        st.success(answer)
+                                    else:
+                                        st.error(f"❌ {res.status_code}: {res.text}")
+                                except Exception as e:
+                                    st.error(f"API error: {str(e)}")
 
                     # Show chat history
                     if st.session_state.expertchat_history:
                         st.markdown("### 💬 Chat History")
-                        for q, a in st.session_state.expertchat_history[::-1]:
-                            st.markdown(f"**Q:** {q}")
-                            st.markdown(f"**A:** {a}")
+                        for chat in st.session_state.expertchat_history[::-1]:
+                            st.markdown(f"🧠 **{chat['expert']}**")
+                            st.markdown(f"**Q:** {chat['question']}")
+                            st.markdown(f"**A:** {chat['answer']}")
                             st.markdown("---")
+
 
             with qa_tab:
                 st.markdown('<div class="section-header">Q & A</div>', unsafe_allow_html=True)
