@@ -30,8 +30,7 @@ def make_web_search_tool(expert_key):
         domain="https://blogmaverick.com/"
         return lambda query: strict_domain_web_search(query, domain)
     elif expert_key == "ReedHastings":
-        domain="https://www.msn.com/"
-        return lambda query: strict_domain_web_search(query, domain)
+        return None
     elif expert_key == "SamWalton":
         return None
     return None
@@ -93,12 +92,12 @@ def chat_with_expert_endpoint(request: ExpertChatRequest):
         - 2. web_search: current events, blogs or online knowledge
         
         Rules:
-        - Speak in first person.
-        - If the question is simple or personal, answer directly.
-        - Give examples from your own experience when possible.
-        - Keep your tone wise, candid, and practical.
-        - If the question is off-topic, say: "Sorry, I can’t help with that."
-
+        - Analyse the question and decide if {expert_name} has a significant connection.
+        - If questions is off-topic, say: "Sorry, I can’t help with that."
+        - Answers should be concise and conversational of {expert_name}'s style try to use the exact words used by {expert_name}.
+        - Give examples from {expert_name}'s experience when possible.
+        - Speak in first person, as if you are {expert_name}.
+        
         Question: {request.question}
         """
 

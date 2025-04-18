@@ -184,7 +184,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # API endpoint
-API_URL = f"{os.getenv('API_URL', 'http://localhost:8080')}"
+API_URL = f"{os.getenv('API_URL', 'http://localhost:8000')}"
 
 @st.cache_data
 def load_cities():
@@ -677,10 +677,9 @@ def main():
             """, unsafe_allow_html=True)
             
             # Display tabs that match the mockups
-            market_analysis, location_intelligence, summary_recommendations, qa_tab, chat_with_experience = st.tabs([
+            market_analysis, location_intelligence, qa_tab, chat_with_experience = st.tabs([
                 "📊 Market Analysis", 
                 "🗺️ Location Intelligence",
-                "📋 Summary & Recommendations",
                 "⁉️ Q & A",
                 "💬 Chat with Experience"
             ])
@@ -688,47 +687,12 @@ def main():
             with market_analysis:
                 st.markdown('<div class="section-header">Market Overview</div>', unsafe_allow_html=True)
                 fig = go.Figure(json.loads(market_data.get("plot")))
-                st.header(f"Market Analysis For {market_data.get('industry', '').title()} Industry")
+                st.header(f"Market Analysis For {market_data.get('industry', '').subtitle()} Industry")
                 # Download the markdown
                 st.markdown(f"[Download Market Analysis]({market_data.get('file_path')})")
                 
                 st.plotly_chart(fig)
                 st.markdown(market_data.get("answer"))
-
-            with summary_recommendations:
-                st.markdown('<div class="section-header">Summary & Recommendations</div>', unsafe_allow_html=True)
-                generate_summary = st.button("Generate Summary & Recommendations", type="primary", use_container_width=True)
-                if generate_summary:
-                    with st.spinner("Generating summary and recommendations..."):
-                        try:
-                            # Create data payload - same as what we used for other API calls
-                            data = {
-                                "industry": selected_industry,
-                                "product": st.session_state.products,
-                                "location_city": selected_city,
-                                "budget": list(budget_range),
-                                "size": size,
-                                "unique_selling_proposition": additional_details,
-                                "session_id": st.session_state.chatbot_session_id
-                            }
-                            
-                            # Call the summary recommendations API
-                            response = requests.post(
-                                f"{API_URL}/summary_recommendations",
-                                json=data,
-                                timeout=180
-                            )
-                            
-                            if response.status_code == 200:
-                                summary_data = response.json()
-                                # Display the markdown content
-                                st.markdown(summary_data.get("answer", ""))
-                            else:
-                                st.error(f"Error: {response.status_code} - Could not generate summary recommendations.")
-                        except Exception as e:
-                            st.error(f"Error processing summary recommendations: {str(e)}")
-                            import traceback
-                            st.error(traceback.format_exc())
                     
             with location_intelligence:
                 if "locations" in location_data:
@@ -756,7 +720,7 @@ def main():
                         "img": "https://pdfparserdataset.s3.us-east-2.amazonaws.com/chatbot_source_books/MarkCuban/MarkCuban.png",
                         "bio": "Billionaire entrepreneur and investor. Owner of the Dallas Mavericks with distinctive perspectives on business innovation and growth.",
                         "key": "MarkCuban",
-                        "base_info": "You are Mark Cuban — self-made billionaire, media personality, and sharp-tongued investor known for speaking his mind. As owner of the Dallas Mavericks and one of the most vocal sharks on *Shark Tank*, you combine tech-savvy thinking with real-world grit. Your style is blunt, confident, and relentless, always pushing entrepreneurs to know their numbers, grind harder, and outwork everyone in the room.",
+                        "base_info": "You are Mark Cuban — self-made billionaire, media personality, and sharp-tongued investor known for speaking his mind. As owner of the Dallas Mavericks and one of the most vocal sharks on *Shark Tank*, you combine tech-savvy thinking with real-world grit. Your style is blunt, confident, and relentless, always pushing entrepreneurs to know their numbers, grind harder, and outwork everyone in the room."
                     },
                     {
                         "name": "Reed Hastings",
@@ -764,15 +728,13 @@ def main():
                         "bio": "Co-founder of Netflix. Visionary in technology and organizational culture with expertise in scaling consumer-focused platforms.",
                         "key": "ReedHastings",
                         "base_info": "You are Reed Hastings — co-founder of Netflix and a pioneer in using technology and company culture to scale consumer platforms. Your insights are grounded in experimentation, data, and empowering people. You speak with calm precision, emphasizing vision, discipline, and innovation over hype.",
-                        "namespace": "reedhastings"
                     },
                     {
                         "name": "Sam Walton",
                         "img": "https://pdfparserdataset.s3.us-east-2.amazonaws.com/chatbot_source_books/SamWalton/SamWalton.png",
                         "bio": "Founder of Walmart. Retail innovator who revolutionized American commerce through strategic expansion and operational excellence.",
                         "key": "SamWalton",
-                        "base_info": "You are Sam Walton — founder of Walmart and a visionary in American retail. You built an empire on principles of low prices, customer satisfaction, rural expansion, and operational excellence. You speak plainly and practically, often emphasizing hard work, frugality, and putting the customer first. Your tone is humble, folksy, and grounded in real-world business experience, often enriched with anecdotes from building Walmart from the ground up.",
-                        "namespace": "samwalton"
+                        "base_info": "You are Sam Walton — founder of Walmart and a visionary in American retail. You built an empire on principles of low prices, customer satisfaction, rural expansion, and operational excellence. You speak plainly and practically, often emphasizing hard work, frugality, and putting the customer first. Your tone is humble, folksy, and grounded in real-world business experience, often enriched with anecdotes from building Walmart from the ground up."
                     }
                 ]
 
@@ -845,8 +807,7 @@ def main():
 
 
             with qa_tab:
-                st.markdown('<div class="section-header">Q & A</div>', unsafe_allow_html=True)
-                
+                st.markdown('<div class="section-header">Q & A</div>', unsafe_allow_html=True)                
                 st.markdown("Ask questions about your business analysis and get personalized answers based on the generated reports.")
 
                 chat_container = st.container()
@@ -912,13 +873,13 @@ def main():
                     
             
             # Add a button to start a new analysis
-            if st.button("Start New Analysis", type="primary", use_container_width=True):
-                st.session_state.submitted = False
-                st.session_state.api_results = None
-                st.session_state.products = []
-                st.session_state.chat_history_display = []
-                message_history = []
-                st.rerun()
+            # if st.button("Start New Analysis", type="primary", use_container_width=True):
+            #     st.session_state.submitted = False
+            #     st.session_state.api_results = None
+            #     st.session_state.products = []
+            #     st.session_state.chat_history_display = []
+            #     message_history = []
+            #     st.rerun()
     
     # Show welcome screen when not submitted
     elif not st.session_state.submitted:
