@@ -1,0 +1,139 @@
+name: Venture-Scope Testing
+
+on:
+  push:
+    branches: [ dev ]
+  pull_request:
+    branches: [ dev ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.12'
+        
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install pytest pytest-mock
+        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+        pip install fastapi httpx pandas plotly langchain-core openai pytest-mock snowflake-connector-python python-dotenv spacy
+        python -m spacy download en_core_web_sm
+        
+    - name: Create mock environment variables for testing
+      run: |
+        echo "AWS_ACCESS_KEY_ID=test" >> $GITHUB_ENV
+        echo "AWS_SECRET_ACCESS_KEY=test" >> $GITHUB_ENV
+        echo "AWS_BUCKET_NAME=test-bucket" >> $GITHUB_ENV
+        echo "AWS_REGION=us-east-1" >> $GITHUB_ENV
+        echo "OPENAI_API_KEY=test-key" >> $GITHUB_ENV
+        echo "SNOWFLAKE_USER=test" >> $GITHUB_ENV
+        echo "SNOWFLAKE_PASSWORD=test" >> $GITHUB_ENV
+        echo "SNOWFLAKE_ACCOUNT=test" >> $GITHUB_ENV
+        echo "SNOWFLAKE_WAREHOUSE=test" >> $GITHUB_ENV
+        echo "SNOWFLAKE_DATABASE=test_db" >> $GITHUB_ENV
+        echo "SNOWFLAKE_ROLE=test_role" >> $GITHUB_ENV
+        echo "TAVILY_API_KEY=test-key" >> $GITHUB_ENV
+        echo "PINECONE_API_KEY=test-key" >> $GITHUB_ENV
+        echo "PINECONE_INDEX=test-index" >> $GITHUB_ENV
+        echo "GOOGLE_API_KEY=test-key" >> $GITHUB_ENV
+        echo "GOOGLE_SEARCH_ENGINE_ID=test-id" >> $GITHUB_ENV
+        echo "GOOGLE_MAPS_API_KEY=test-key" >> $GITHUB_ENV
+        echo "PINECONE_ENVIRONMENT=test-env" >> $GITHUB_ENV
+        
+    - name: Create mock Pinecone module
+      run: |
+        mkdir -p $GITHUB_WORKSPACE/mocks
+        cat > $GITHUB_WORKSPACE/mocks/pinecone_mock.py << 'EOF'
+        import sys
+        from unittest.mock import MagicMock
+
+        # Create a mock module for pinecone
+        mock_pinecone = MagicMock()
+        mock_index = MagicMock()
+        mock_pinecone.Index.return_value = mock_index
+        mock_index.query.return_value = {"matches": [{"id": "test", "score": 0.9, "metadata": {"text": "Test content"}}]}
+
+        # Add the mock to sys.modules
+        sys.modules['pinecone'] = mock_pinecone
+        EOF
+        
+    - name: Create test file runner
+      run: |
+        mkdir -p $GITHUB_WORKSPACE/runners
+        cat > $GITHUB_WORKSPACE/runners/run_tests.py << 'EOF'
+        import sys
+        import os
+        import pytest
+
+        # Add the workspace to the Python path
+        workspace = os.environ.get('GITHUB_WORKSPACE', os.getcwd())
+        sys.path.insert(0, workspace)
+
+        # Import the mock Pinecone module first
+        import mocks.pinecone_mock
+
+        # Now run the tests
+        pytest.main(['-v', 'backend/app/test_data/test_all.py'])
+        EOF
+        
+        cat > $GITHUB_WORKSPACE/runners/run_integration_tests.py << 'EOF'
+        import sys
+        import os
+        import pytest
+
+        # Add the workspace to the Python path
+        workspace = os.environ.get('GITHUB_WORKSPACE', os.getcwd())
+        sys.path.insert(0, workspace)
+
+        # Import the mock Pinecone module first
+        import mocks.pinecone_mock
+
+        # Now run the tests
+        pytest.main(['-v', '--log-cli-level=DEBUG', 'backend/app/integrations/test.py'])
+        EOF
+        
+    - name: Run unit tests
+      run: |
+        python $GITHUB_WORKSPACE/runners/run_tests.py
+        
+    - name: Run integration tests
+      run: |
+        python $GITHUB_WORKSPACE/runners/run_integration_tests.py
+
+  security-scan:
+    runs-on: ubuntu-latest
+    # Make security scan not depend on test success
+    if: always()
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.12'
+        
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install bandit
+        
+    - name: Run Bandit security scanner
+      run: |
+        bandit -r backend/ -f json -o bandit-results.json || true
+        
+    - name: Upload security scan results
+      uses: actions/upload-artifact@v4
+      with:
+        name: security-scan-results
+        path: bandit-results.json
+        if-no-files-found: warn
