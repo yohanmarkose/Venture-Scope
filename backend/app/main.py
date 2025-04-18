@@ -313,7 +313,6 @@ def convert_summary_report_to_markdown(report_dict):
         return f"Error formatting report: {str(e)}"
     
 
-
 def get_graph(industry):
     # ─── Fetch & prep ────────────────────────────────────────────────────────
     sf = SnowflakeConnector(industry)

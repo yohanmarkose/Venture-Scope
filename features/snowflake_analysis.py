@@ -80,23 +80,25 @@ class SnowflakeConnector:
     def get_company_data_by_industry(self, limit=20):
         """Get company data filtered by industry and optionally by size category"""
 
-        table_name = "ENHANCED_COMPANIES"
         where_clause = f"WHERE INDUSTRY LIKE '%{self.industry}%'"
         
         if self.size_category and self.size_category.lower() == "large":
-            where_clause += f" AND MARKET_CAP IS NOT NULL"
-            table_name = "LARGE_COMPANY_DATA_FINAL"
+            large_where_clause = where_clause + f" AND MARKET_CAP IS NOT NULL"
+            large_table_name = "LARGE_COMPANY_DATA_FINAL"
             query_large = f"""
             SELECT *
-            FROM opportunity_analysis.market_analysis.{table_name}
-            {where_clause}
+            FROM opportunity_analysis.market_analysis.{large_table_name}
+            {large_where_clause}
             ORDER BY MARKET_CAP DESC
             LIMIT {limit};
             """
-            return self.execute_query(query_large)
-        
+            df = self.execute_query(query_large)
+            if not df.empty and df.shape[0] > 4:
+                return df
+            
+        table_name = "ENHANCED_COMPANIES"
         if self.size_category:
-            where_clause += f" AND SIZE_CATAGORY ILIKE '{self.size_category}'"
+            where_clause += f" AND SIZE_CATAGORY = '{self.size_category}'"
         
         query_normal = f"""
         SELECT *

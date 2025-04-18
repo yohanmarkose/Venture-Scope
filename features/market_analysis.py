@@ -108,8 +108,8 @@ def snowflake_query(industry: str = "financial services", size_category: str = N
     - MARKET_CAP/PERFORMANCE_SCORE: Financial metrics based on size category
     
     Args:
-        industry: The industry to analyze (e.g., "financial services")
-        size_category: Company size filter ("small", "medium", "large")
+        industry: The industry to analyze
+        size_category: Company size filter
     
     Returns:
         DataFrame containing top 5 companies with their details for displaying in Market Giants table
@@ -122,7 +122,7 @@ def snowflake_query(industry: str = "financial services", size_category: str = N
     print("df below\n", companies)
 
     if companies is not None:
-        if size_category and size_category.lower() == "large":
+        if size_category and size_category.lower() == "large" and "MARKET_CAP" in companies.columns:
             companies = companies[companies['MARKET_CAP'].notnull() & companies['T_SYMBOL'].notnull()]
             print(companies[['COMPANY_NAME', 'FOUNDED', 'COMPANY_AGE', 'SIZE', 'WEBSITE', 'LINKEDIN_URL', 'REGION', 'MARKET_CAP', 'YEARLY_RETURN', 'VOLATILITY']].head(5))
 
@@ -146,11 +146,12 @@ def final_answer(
     Returns a comprehensive market analysis report for the specified industry.
     
     Args:
-        market_players: Markdown table of top 5 companies from snowflake_query. Display all the columns in the table including linked in column
-        - title case the company names and format the table in markdown
+        market_players: Markdown table of top 5 companies from snowflake_query
+        - Display all the columns in the table including linked in column
+        - Title case the company names and format the table in markdown
         
-        competitor_details: With company name as heading (Title case) and corresponding website link, give a detailed breakdown for each company 
-        and key points extracted from website content (From the fetch_web_content and web search tool).
+        competitor_details: With company name as heading (Title case) and corresponding website link just below, give a detailed breakdown for each company 
+        and key points extracted from website content (Bullet points).
         - Give all the details about each companies approach, the products they offer, and their market position from the website and websearch
         - Give More than 3 sentences for each point if possible
 
@@ -159,7 +160,7 @@ def final_answer(
         - Include tables in markdown format for any relevant data
         - Provide information regarding the industry landscape, including major players and their market share
 
-        industry_trends: Point by Point current and emerging trends in the industry from web search and fetch web content tool.
+        industry_trends: Point by Point current and emerging trends in the industry from web search
 
         - Highlight significant trends, technologies, and innovations shaping the industry.
         - Discuss any regulatory or economic factors influencing the industry
@@ -199,44 +200,21 @@ def init_research_agent(industry, size_category):
     system_prompt = f"""You are a Market Analysis agent specializing in detailed industry research.
     Given the industry input '{industry}', follow this EXACT workflow:
 
-    1. FIRST, use the snowflake_query tool to fetch the top 5 companies in this industry.
-    - This data will be used for the Market Giants section
-    - Save the company websites from this output for the next step
+    1. FIRST, use the snowflake_query tool to fetch '{size_category}' companies in this industry.
+    2. SECOND, use the fetch_web_content tool with the website URLs from step 1.
+    3. THIRD, use the web_search tool for additional industry insights.
+    4. FINALLY, use the final_answer tool to compile a complete report.
 
-    2. SECOND, use the fetch_web_content tool with the website URLs from the previous step
-    - Extract key information for each company to create the Competitor Details section
-    - Organize this information by company name with bullet points of key insights
+    CRITICAL: You MUST complete ALL steps in order before returning results.
+    DO NOT return intermediate results from any single tool.
+    You MUST use the final_answer tool as the last step with complete report sections.
 
-    3. THIRD, use the web_search tool to gather additional data about the top 5 companies fetched from snowflake tool.
-
-    4. FOUR, Use the web_search tool and fetch_web_content tools to gather information about the industry as a whole. Look for:
-    - industry trends and additional market insights
-    - Search for recent developments and market projections
-    - Focus on information not covered by the company websites
-
-    4. FINALLY, compile all information into a comprehensive report using final_answer with these sections:
-    - Market Players: Table of top companies from snowflake_query formatted as a markdown table
-    - Competitor Details: Company-by-company breakdown with website insights
-    - Industry Overview: Overall analysis of the industry landscape
-    - Industry Trends: Current and emerging trends
-
-    CRITICAL: When using the final_answer tool, you MUST provide separate content for EACH of these parameters:
-    - market_players: Format the snowflake data as a markdown table. With all the table columns that was outputted included.
-    - competitor_details: Organize insights from web search and fetch web content tool contents by company. company name should be in title case and the website link should be clickable.
-    - industry_overview: Provide a detailed point by point overview of the industry using web search and fetch web content tool
-    - industry_trends: Point by point Industry trends identified from web_search tool and fetch_web_content tools
-    - sources: List all sources used during research
-
-    Do NOT pass search queries or intermediate results directly to final_answer.
-    Each parameter must contain properly formatted content for that specific section.
-
-    Rules:
-    - Do Not use the same tool with exactly the same inputs twice
-    - Do not use the same tool more than 10 times
-    - If size_category '{size_category}' is provided, use it to filter the snowflake results
-    - You MUST use the final_answer tool after collecting sufficient information
-    - IMPORTANT: Use the final_answer tool after collecting information from all other tools
-    - NEVER use the same tool with exactly the same inputs twice
+    CRITICAL RULES:
+    - Complete all steps in sequence
+    - If fetch_web_content tool fails more than 3 times dont use it again and move on to the next step 
+    - Always use fetch_web_content after snowflake_query
+    - Always end with final_answer
+    - Never skip steps in the workflow
     """
 
     prompt = ChatPromptTemplate.from_messages([
