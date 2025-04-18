@@ -24,7 +24,6 @@ from services.s3 import S3FileManager
 load_dotenv()
 
 app = FastAPI()
-API_URL = "http://localhost:8000/"
 
 AWS_BUCKET_NAME = os.getenv("AWS_BUCKET_NAME")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
