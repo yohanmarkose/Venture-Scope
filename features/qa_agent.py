@@ -9,7 +9,7 @@ from langchain_core.tools import tool
 from langchain_core.messages import ToolCall, ToolMessage
 from langchain_openai import ChatOpenAI
 from functools import partial
-from features.vecotre_db.pinecone_index import query_pinecone
+from features.vector_db.pinecone_index import query_pinecone
 from dotenv import load_dotenv
 load_dotenv()
 
