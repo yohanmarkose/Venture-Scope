@@ -19,8 +19,7 @@ st.set_page_config(
     page_title="Venture Scope | Business Location Intelligence",
     page_icon="🌎",
     layout="wide",
-    initial_sidebar_state="expanded",
-    theme="light"
+    initial_sidebar_state="expanded"
 )
 
 # Custom CSS for styling to match mockups
