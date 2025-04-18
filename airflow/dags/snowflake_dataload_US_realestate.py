@@ -13,7 +13,7 @@ default_args = {
 with DAG(
     dag_id='custom_usretailestate_raw_data_snowflake_v1',
     default_args=default_args,
-    tags=['snowflake','dataload','location_analysis','usretailestate','marketplace'],
+    tags=['snowflake','dataload','location_analysis','usretailestate','marketplace','venture-scope'],
     description='Loads or reloads dataset from Snowflake Marketplace for US Real Estate',
     schedule_interval=None,
     start_date=datetime(2025, 1, 1),

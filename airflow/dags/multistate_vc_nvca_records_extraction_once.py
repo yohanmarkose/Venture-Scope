@@ -26,7 +26,7 @@ from services.mistral_orc_processing import pdf_mistralocr_converter
     },
     schedule_interval='@once',
     catchup=False,
-    tags=["vc_reports", "scraping", "markdown"],
+    tags=["vc_reports", "scraping", "markdown",'venture-scope'],
     max_active_runs=1,
     max_active_tasks=2
 )

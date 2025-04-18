@@ -42,7 +42,7 @@ def snowflake_finaltable():
 with DAG(
     dag_id='custom_marketanalysis_raw_data_snowflake',
     default_args=default_args,
-    tags=['snowflake','dataload','market_analysis','freecompanydatset','marketplace'],
+    tags=['snowflake','dataload','market_analysis','freecompanydatset','marketplace','venture-scope'],
     description='Loads or reloads snowflakes tables dataset from Snowflake Marketplace for Freecompanydataset',
     schedule_interval=None,
     start_date=datetime(2025, 1, 1),
