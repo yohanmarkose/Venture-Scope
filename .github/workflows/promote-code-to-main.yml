@@ -2,7 +2,7 @@ name: Promote to Main
 
 on:
   workflow_run:
-    workflows: ["Test Backend"]
+    workflows: ["Venture-Scope Testing"]
     branches: [dev]
     types: [completed]
 
