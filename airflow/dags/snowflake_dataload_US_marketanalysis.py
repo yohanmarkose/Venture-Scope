@@ -44,7 +44,7 @@ with DAG(
     default_args=default_args,
     tags=['snowflake','dataload','market_analysis','freecompanydatset','marketplace','venture-scope'],
     description='Loads or reloads snowflakes tables dataset from Snowflake Marketplace for Freecompanydataset',
-    schedule_interval=None,
+    schedule_interval='0 0 1 1,4,7,10 *',
     start_date=datetime(2025, 1, 1),
     catchup=False,
 ) as dag:

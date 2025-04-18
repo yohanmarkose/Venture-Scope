@@ -15,7 +15,7 @@ with DAG(
     default_args=default_args,
     tags=['snowflake','dataload','location_analysis','usretailestate','marketplace','venture-scope'],
     description='Loads or reloads dataset from Snowflake Marketplace for US Real Estate',
-    schedule_interval=None,
+    schedule_interval='0 0 1 1,4,7,10 *',
     start_date=datetime(2025, 1, 1),
     catchup=False,
 ) as dag:
