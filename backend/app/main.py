@@ -29,10 +29,9 @@ from tavily import TavilyClient
 load_dotenv()
 
 app = FastAPI()
-API_URL = "http://localhost:8000/"
 
 AWS_BUCKET_NAME = os.getenv("AWS_BUCKET_NAME")
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+OPENAI_KEY = os.getenv("OPENAI_API_KEY")
 
 
 INDUSTRIES = [
