@@ -16,15 +16,10 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from langchain_core.messages import HumanMessage, AIMessage
 import uuid
-from features.qa_agent import create_qa_chatbot, handle_user_message_with_history
+from features.qa_agent import run_chatbot
 import warnings
 from features.summary_agent import run_summary_agent
 from services.s3 import S3FileManager
-
-from langchain.agents import Tool, initialize_agent
-from langchain_community.chat_models import ChatOpenAI
-from services.vectordb_expertchat import query_pinecone
-from tavily import TavilyClient
 
 load_dotenv()
 
@@ -194,7 +189,7 @@ def read_root():
 def health_check():
     return {"status": "ok"}
 
-# Endpoint to classify industry based on user input
+# Function to classify industry based on user input
 def classify_industry(domain: str, products: list) -> str:
     client = openai.OpenAI(api_key=OPENAI_API_KEY)
 
@@ -203,7 +198,9 @@ A company operates in the domain of: {domain}.
 They offer products or services such as: {', '.join(products)}.
 
 From the following list of industries, pick the **one best matching industry**:
-{', '.join(INDUSTRIES)}
+{', '.join(INDUSTRIES)}.
+
+Always return an industry name from the list even if not exactly matching the company's domain or products (best possible match).
 
 Return ONLY one industry name from the list.
 """
@@ -256,16 +253,14 @@ def convert_report_to_markdown(report_dict):
     
     # Format the markdown report
     markdown_report = f"""
-# Market Analysis Report
+## Industry Overview
+{industry_overview}
 
 ## Market Players
 {market_players}
 
 ## Competitor Details
 {competitor_details}
-
-## Industry Overview
-{industry_overview}
 
 ## Industry Trends
 {industry_trends}
@@ -317,7 +312,6 @@ def convert_summary_report_to_markdown(report_dict):
         print(f"Error converting report to markdown: {str(e)}")
         return f"Error formatting report: {str(e)}"
     
-
 
 def get_graph(industry):
     # ─── Fetch & prep ────────────────────────────────────────────────────────
@@ -390,7 +384,7 @@ def market_analysis(query: BusinessQuery):
             "chat_history": [],
             "industry": industry,
             "size_category": size_category
-        }, config={"recursion_limit": 70})
+        }, config={"recursion_limit": 90})
 
         answer = out["intermediate_steps"][-1].tool_input
         markdown_report = convert_report_to_markdown(answer)
@@ -419,8 +413,6 @@ def market_analysis(query: BusinessQuery):
 @app.post("/location_intelligence", response_model=LocationIntelligenceResponse)
 async def location_intelligence(query: BusinessQuery):
     try:
-        # Format the query for agent processing
-
         # Get industry from the domain and products
         industry = classify_industry(query.industry, query.product)
         
@@ -435,6 +427,16 @@ async def location_intelligence(query: BusinessQuery):
         
         # Run the location intelligence pipeline
         result = await start_location_intelligence(formatted_query)
+
+        ## Convert the result to markdown format
+        locations_str = "\n".join([json.dumps(loc) for loc in result.get("locations", [])])
+        competitors_str = "\n".join([json.dumps(comp) for comp in result.get("competitors", [])])
+        markdown_report = locations_str + "\n" + competitors_str
+
+        base_path = base_path = f"users/temp/"
+        s3_obj = S3FileManager(AWS_BUCKET_NAME, base_path)
+        file = f"{base_path}location_analysis.md"
+        s3_obj.upload_file(AWS_BUCKET_NAME, file, markdown_report)
         
         # Validate the response has the expected structure
         if not isinstance(result, dict) or "locations" not in result or "competitors" not in result:
@@ -453,57 +455,78 @@ def question_and_analysis(query: QuestionRequest):
         print(f"Received question: {query.question}")
         print(f"Session ID: {query.session_id}")
         
-        # Process message history if provided
-        message_history = []
+        # Convert message history to appropriate format
+        chat_history = []
         if query.message_history:
             print(f"Message history provided with {len(query.message_history)} items")
             for msg in query.message_history:
                 if msg.type == "human":
-                    message_history.append(HumanMessage(content=msg.content))
+                    chat_history.append(HumanMessage(content=msg.content))
                 elif msg.type == "ai":
-                    message_history.append(AIMessage(content=msg.content))
+                    chat_history.append(AIMessage(content=msg.content))
+
+        # Add current question to history if needed
+        if not chat_history or all(isinstance(msg, AIMessage) for msg in chat_history):
+            chat_history.append(HumanMessage(content=query.question))
         
-        # If no history or only has AI messages, add the current question
-        if not message_history or all(isinstance(msg, AIMessage) for msg in message_history):
-            message_history.append(HumanMessage(content=query.question))
-            
+        # Load market analysis report from S3
+        base_path = f"users/temp/"
+        s3_obj = S3FileManager(AWS_BUCKET_NAME, base_path)
+        market_file = f"{base_path}market_analysis.md"
+        market_analysis_output = s3_obj.load_s3_file_content(market_file)
+
+        # base_path = base_path = f"users/temp/"
+        # s3_obj = S3FileManager(AWS_BUCKET_NAME, base_path)
+        # file = f"{base_path}location_analysis.md"
+        # location_analysis_output = s3_obj.load_s3_file_content(file)
+
+        # Use location information from the query
+        location_analysis_output = ", ".join(query.location_city)
+        
         # Prepare report data
         report_data = {
-            "market_analysis": f"{query.industry}, {query.size}",
-            "emerging_trends": query.industry,
-            "location_intelligence": query.location_city,
-            "recommendations": f"{query.industry}, {query.size}, {query.budget}"
+            "market_analysis": market_analysis_output,
+            "location_intelligence": location_analysis_output,
+            "recommendations": f"{query.industry}, {query.size}, {query.budget}, \n{query.unique_selling_proposition}"
         }
         print("Report data:", report_data)
         
-        # Create or get existing chatbot session
+        # Create or get existing session ID
         session_id = query.session_id or str(uuid.uuid4())
         print("Session ID:", session_id)
         
-        if session_id not in active_chatbots:
-            # Create new chatbot instance with the specific session ID
-            print("Creating new chatbot instance")
-            chatbot = create_qa_chatbot(report_data)
-            print("Chatbot instance created")
-            chatbot = chatbot.with_config(
-                {"thread": {"configurable": {"session_id": session_id}}}
-            )
-            print("Chatbot instance configured")
-            active_chatbots[session_id] = (chatbot, report_data)
-            print("Chatbot instance stored")
-        else:
-            # Get existing chatbot
-            chatbot, stored_report_data = active_chatbots[session_id]
-            # Update report data if needed
-            report_data = {**stored_report_data, **report_data}
-            active_chatbots[session_id] = (chatbot, report_data)
+        # Process the request using the new Q&A agent
+        runnable = run_chatbot(report_data)
         
-        # Process the user's question with message history
-        response = handle_user_message_with_history(chatbot, message_history, report_data)
-        print("Response from chatbot:", response)
+        # Prepare the initial state for the chatbot
+        initial_state = {
+            "chat_history": chat_history,
+            "intermediate_steps": [],
+            "report_data": report_data,
+            "tool_calls_count": 0
+        }
+        
+        # Run the chatbot with the LangGraph
+        out = runnable.invoke(initial_state, config={"recursion_limit": 50})
+        
+        # Get the final answer from the output
+        final_steps = out.get("intermediate_steps", [])
+        if final_steps:
+            # The last step should contain our answer
+            last_step = final_steps[-1]
+            if isinstance(last_step, tuple):
+                action, response = last_step
+                answer = response
+            else:
+                # Fallback if format is unexpected
+                answer = "I couldn't process your question properly. Please try again."
+        else:
+            answer = "No response was generated. Please try a different question."
+        
+        print("Response from chatbot:", answer)
         
         return {
-            "answer": response,
+            "answer": answer,
             "session_id": session_id
         }
     except Exception as e:
@@ -528,27 +551,30 @@ def final_analysis(query: SummaryRecommendation):
         base_path = base_path = f"users/temp/"
         s3_obj = S3FileManager(AWS_BUCKET_NAME, base_path)
         file = f"{base_path}market_analysis.md"
-
         market_analysis_output = s3_obj.load_s3_file_content(file)
 
-        location_intelligence_output = ", ".join(query.location_city)
+        # base_path = base_path = f"users/temp/"
+        # s3_obj = S3FileManager(AWS_BUCKET_NAME, base_path)
+        # file = f"{base_path}location_analysis.md"
+        # location_analysis_output = s3_obj.load_s3_file_content(file)
+
+        location_analysis_output = ", ".join(query.location_city)
 
         industry = classify_industry(formatted_query["industry"], formatted_query["product"])
         print("Industry selected is:", industry)
 
         runnable = run_summary_agent(industry, formatted_query["location_city"], formatted_query["budget"],
-                     market_analysis_output, location_intelligence_output)
+                     market_analysis_output, location_analysis_output)
         out = runnable.invoke({ 
             "chat_history": [],
             "industry": industry,
             "location": formatted_query["location_city"],
             "budget_level": formatted_query["budget"],
             "market_analysis_output": market_analysis_output,
-            "location_intelligence_output": location_intelligence_output,
+            "location_intelligence_output": location_analysis_output,
             "intermediate_steps": []
         }, config={"recursion_limit": 70}) 
         
-        # print("Raw output:", out)
         answer = out["intermediate_steps"][-1].tool_input
         markdown_report = convert_summary_report_to_markdown(answer)
         
@@ -565,95 +591,8 @@ def final_analysis(query: SummaryRecommendation):
         print(f"Error in summary recommendations: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error generating recommendations: {str(e)}")
     
+from features.chat_with_expert import ExpertChatRequest, chat_with_expert_endpoint
 
-# router = APIRouter()
-
-# # ------------------ Models ------------------ #
-# class ExpertChatRequest(BaseModel):
-#     expert_key: str
-#     namespace: str
-#     question: str
-#     base_info: str
-#     model: str = "gpt-4o-mini"
-
-# # ------------------ Init Clients ------------------ #
-# llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
-# tavily = TavilyClient(api_key=os.getenv("TAVILY_API_KEY"))
-
-# # ------------------ Tool Functions ------------------ #
-# def make_pinecone_tool(namespace):
-#     def tool_func(query: str):
-#         matches = query_pinecone(query, namespace=namespace, top_k=5)
-#         return "\n\n".join([m["metadata"]["text"] for m in matches if "text" in m.get("metadata", {})])
-#     return tool_func
-
-# def make_web_search_tool_for_expert(expert_key: str):
-#     if expert_key == "benhorowitz":
-#         return lambda query: strict_domain_web_search(query, domain="a16z.com")
-#     else:
-#         return None  
-
-# def strict_domain_web_search(query: str, domain: str):
-#     result = tavily.search(query=query)
-    
-#     def is_preferred(res):
-#         return domain in res.get("url", "")
-
-#     if isinstance(result, dict) and "results" in result:
-#         filtered = list(filter(is_preferred, result["results"]))
-#         if filtered:
-#             return filtered[0]["content"]
-#         else:
-#             return f"No relevant results found from {domain}."
-#     return "⚠️ Unexpected web search result format."
-
-# # ------------------ Endpoint ------------------ #
-# @router.post("/chat_with_expert")
-# def chat_with_expert(request: ExpertChatRequest):
-#     try:
-#         expert_name = request.expert_key.replace("_", " ").title()
-#         base_info = request.base_info or f"You are {expert_name}, an industry expert."
-
-#         tools = [
-#             Tool(name="book_knowledge", func=make_pinecone_tool(request.namespace),
-#                  description="Use for questions based on the expert's published work."),
-#             Tool(name="web_search", func=make_web_search_tool_for_expert(request.expert_key),
-#                  description="Use for questions requiring real-time information or latest blogs from 2025")
-#         ]
-
-#         agent = initialize_agent(tools=tools, llm=llm, agent="chat-conversational-react-description", verbose=True ,handle_parsing_errors=True)
-
-#         final_prompt = f"""
-#         You are {expert_name}. {base_info}
-#         You have access to two sources of information:
-#         - book_knowledge: your published writings, talks, and expert-authored material
-#         - web_search: Your real time or latest blogs and articles
-
-#         Guidelines:
-#         - Use either book_knowledge or web_search not more than once — choose based on the complexity of the question.
-#         - All the responses generated should be in the first person
-#         - If the question is simple or based on personal experience, answer it directly.
-#         - Speak in a candid, wise, and occasionally humorous tone. Use examples, stories, and leadership lessons.
-#         - If the question is off-topic or irrelevant, respond with: "Sorry, I can’t help with that."
-
-#         Question: {request.question}
-#         """
-
-#         response = agent.invoke({
-#             "input": final_prompt,
-#             "chat_history": []  # optionally populate from request.chat_history
-#         })
-
-#         return {
-#             "answer": response["output"],
-#             "trace": response.get("intermediate_steps", [])
-#         }
-
-
-#     except Exception as e:
-#         import traceback
-#         traceback.print_exc()
-#         raise HTTPException(status_code=500, detail=f"Agent error: {str(e)}")
-
-# # ------------------ Register Router ------------------ #
-# app.include_router(router)
+@app.post("/chat_with_expert")
+def chat_with_expert(request: ExpertChatRequest):
+    return chat_with_expert_endpoint(request)
