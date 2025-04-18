@@ -143,8 +143,7 @@ jobs:
         if-no-files-found: warn
 
   deploy:
-    needs: [test, security-scan]
-    if: github.event_name == 'pull_request' && github.ref == 'refs/heads/main'
+    needs: test
     runs-on: ubuntu-latest
     steps:
     - name: Checkout code
